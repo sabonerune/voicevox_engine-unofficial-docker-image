@@ -35,7 +35,7 @@ target "_common" {
 }
 
 target "cpu" {
-  name = "cpu-${arch.name}"
+  name = "cpu-${os.name}-${arch.name}"
   matrix = {
     arch = [
       {
@@ -48,22 +48,53 @@ target "cpu" {
         runtime = "aarch64"
         platform = "linux/arm64"
       }
+    ],
+    os = [
+      {
+        name = "ubuntu20"
+        base_image = "mirror.gcr.io/ubuntu:20.04"
+        tag = "ubuntu20.04"
+      },
+      {
+        name = "ubuntu22"
+        base_image = "mirror.gcr.io/ubuntu:22.04"
+        tag = "ubuntu22.04"
+      }
     ]
   }
   args = {
-    "CORE_URL" = core_url(arch.name, "cpu")
-    "RUNTIME_URL"= runtime_url(arch.runtime, "cpu")
+    BASE_IMAGE = os.base_image
+    CORE_URL = core_url(arch.name, "cpu")
+    RUNTIME_URL= runtime_url(arch.runtime, "cpu")
   }
   platforms = [arch.platform]
-  tags = ["${TAG_PREFIX}:cpu-ubuntu20.04-${ENGINE_VERSION}"]
+  tags = ["${TAG_PREFIX}:cpu-${os.tag}-${ENGINE_VERSION}"]
 }
 
 target "nvidia" {
+  name = "cpu-${os.name}"
+  matrix = {
+    os = [
+      {
+        name = "ubuntu20"
+        base_image = "mirror.gcr.io/ubuntu:20.04"
+        runtime_image = "mirror.gcr.io/nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04"
+        tag = "ubuntu20.04"
+      },
+      {
+        name = "ubuntu22"
+        base_image = "mirror.gcr.io/ubuntu:22.04"
+        runtime_image = "mirror.gcr.io/nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04"
+        tag = "ubuntu22.04"
+      }
+    ]
+  }
   args = {
-    BASE_RUNTIME_IMAGE = "mirror.gcr.io/nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04"
-    "CORE_URL" = core_url("x64", "gpu")
-    "RUNTIME_URL"= runtime_url("x64", "gpu")
+    BASE_IMAGE = os.base_image
+    BASE_RUNTIME_IMAGE = os.runtime_image
+    CORE_URL = core_url("x64", "gpu")
+    RUNTIME_URL= runtime_url("x64", "gpu")
   }
   target = "runtime-nvidia-env"
-  tags = ["${TAG_PREFIX}:nvidia-ubuntu20.04-${ENGINE_VERSION}"]
+  tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${ENGINE_VERSION}"]
 }
