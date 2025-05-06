@@ -72,7 +72,7 @@ target "cpu" {
 }
 
 target "nvidia" {
-  name = "cpu-${os.name}"
+  name = "nvidia-${os.name}"
   matrix = {
     os = [
       {

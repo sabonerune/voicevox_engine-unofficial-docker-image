@@ -152,7 +152,7 @@ RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y \
     gosu \
-    libssl1.1 &&\
+    openssl &&\
   apt-get clean &&\
   rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home USER
@@ -169,9 +169,9 @@ COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
 COPY --from=prepare-resource /opt/voicevox_engine/resources ./resources
 COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
 
-ARG VOICEVOX_ENGINE_VERSION=latest
-RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${VOICEVOX_ENGINE_VERSION}\"/" voicevox_engine/__init__.py
-RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${VOICEVOX_ENGINE_VERSION}\"/" engine_manifest.json
+ARG ENGINE_VERSION=latest
+RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${ENGINE_VERSION}\"/" voicevox_engine/__init__.py
+RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION}\"/" engine_manifest.json
 
 COPY --from=extract-onnxruntime /opt/onnxruntime /opt/onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
