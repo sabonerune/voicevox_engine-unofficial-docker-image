@@ -4,14 +4,14 @@ ARG BASE_IMAGE=mirror.gcr.io/ubuntu:20.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
 ARG PYTHON_VERSION=3.11.9
-ARG ENGINE_VERSION=0.23.0
 ARG RESOURCE_VERSION=0.23.0
 
+ARG ENGINE_VERSION
 ARG CORE_URL
 ARG RUNTIME_URL
 
 FROM scratch AS checkout-engine
-ARG ENGINE_VERSION
+ARG ENGINE_VERSION=master
 ADD https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} /voicevox_engine
 
 
@@ -100,6 +100,10 @@ EOF
 FROM ${BASE_IMAGE} AS build-env
 WORKDIR /opt/voicevox_engine
 
+COPY --from=ghcr.io/astral-sh/uv /uv /uvx /opt/uv/bin/
+COPY --from=build-python /opt/python /opt/python
+ENV PATH="/opt/uv/bin:$PATH"
+
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -109,25 +113,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     build-essential \
     git
 
-COPY --from=build-python /opt/python /opt/python
 COPY --from=checkout-engine /voicevox_engine /opt/voicevox_engine
 
-# WORKAROUND
-RUN sed -i "s/@0fcb731c94555e8d160d18e7f1a4d005b2e8e852/@5b70b94f3460ece07ea183227db088ce8d5212a6/" requirements.txt
-RUN /opt/python/bin/python3 -m pip install -r requirements.txt
-
-RUN /opt/python/bin/python3 -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
+RUN uv sync --python=/opt/python/bin/python3
+RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
 
 
 FROM build-env AS gen-licenses-env
-RUN <<EOF
-  # Generate licenses.json
-  set -eux
-  requirements="$(grep pip-licenses requirements-dev.txt | cut -f 1 -d ';')"
-  /opt/python/bin/python3 -m pip install $requirements
-  export PATH="/opt/python/bin:${PATH:-}"
-  /opt/python/bin/python3 tools/generate_licenses.py > licenses.json
-EOF
+RUN OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
+  bash tools/create_venv_and_generate_licenses.bash
 
 
 FROM build-env AS prepare-resource
@@ -137,10 +131,9 @@ COPY --from=checkout-resource /character_info /tmp/resource/character_info
 COPY --from=checkout-resource /scripts/clean_character_info.py /tmp/resource/scripts/
 COPY --from=checkout-resource /engine /tmp/resource/engine
 
-RUN ln -s python3.11 /opt/python/bin/python
-RUN PATH="/opt/python/bin:${PATH:-}" DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
+RUN DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
 
-RUN /opt/python/bin/python3 tools/generate_filemap.py --target_dir resources/character_info
+RUN uv run tools/generate_filemap.py --target_dir resources/character_info
 
 COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
 
@@ -163,6 +156,7 @@ COPY --from=checkout-engine /voicevox_engine/voicevox_engine ./voicevox_engine
 COPY --from=checkout-resource /engine/README.md .
 
 COPY --from=build-env /opt/python /opt/python
+COPY --from=build-env /opt/voicevox_engine/.venv ./.venv
 
 COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
 
@@ -191,7 +185,7 @@ fi
 EOF
 
 EXPOSE 50021
-ENTRYPOINT [ "/entrypoint.sh", "/opt/python/bin/python3", "/opt/voicevox_engine/run.py" ]
+ENTRYPOINT [ "/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py" ]
 CMD [ "--use_gpu", "--voicelib_dir", "/opt/voicevox_core", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
 
 

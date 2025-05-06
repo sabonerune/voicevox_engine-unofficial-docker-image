@@ -1,7 +1,11 @@
 name: build-docker-image
 
 on:
-  - workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      ENGINE_VERSION:
+        description: "Target Engine version."
+        type: string
 
 env:
   REGISTRY_IMAGE: ghcr.io/sabonerune/voicevox_engine-unofficial-docker-image
@@ -48,6 +52,7 @@ jobs:
           targets: ${{ matrix.target }}
         env:
           TAG_PREFIX: ${{ env.REGISTRY_IMAGE }}
+          ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Build
         if: ${{ !startsWith(matrix.target, 'nvidia') }}
@@ -58,6 +63,8 @@ jobs:
           set: |
             *.output=type=image,push-by-digest=true,name-canonical=true,push=true
             *.tags=${{ env.REGISTRY_IMAGE }}
+        env:
+          ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Export digest
         if: ${{ !startsWith(matrix.target, 'nvidia') }}
@@ -102,7 +109,10 @@ jobs:
 
       - name: Print Docker bake
         run: |
-          TAG_PREFIX=${{ env.REGISTRY_IMAGE }} docker buildx bake --print > ${{ runner.temp }}/print_bake.json
+          docker buildx bake --print > ${{ runner.temp }}/print_bake.json
+        env:
+          TAG_PREFIX: ${{ env.REGISTRY_IMAGE }}
+          ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Create manifest list and push for cpu-ubuntu20
         working-directory: ${{ runner.temp }}/digests

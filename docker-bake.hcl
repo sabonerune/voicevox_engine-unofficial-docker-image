@@ -3,7 +3,10 @@ variable "TAG_PREFIX" {
 }
 
 variable "ENGINE_VERSION" {
-  default = "0.23.0"
+}
+
+variable "TAG_ENGINE_VERSION" {
+  default = notequal("",ENGINE_VERSION) ? ENGINE_VERSION : "dev"
 }
 
 variable "CORE_VERSION" {
@@ -68,7 +71,7 @@ target "cpu" {
     RUNTIME_URL= runtime_url(arch.runtime, "cpu")
   }
   platforms = [arch.platform]
-  tags = ["${TAG_PREFIX}:cpu-${os.tag}-${ENGINE_VERSION}"]
+  tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
 
 target "nvidia" {
@@ -96,5 +99,5 @@ target "nvidia" {
     RUNTIME_URL= runtime_url("x64", "gpu")
   }
   target = "runtime-nvidia-env"
-  tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${ENGINE_VERSION}"]
+  tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
