@@ -148,7 +148,6 @@ RUN apt-get update && \
     openssl &&\
   apt-get clean &&\
   rm -rf /var/lib/apt/lists/*
-RUN useradd --create-home USER
 
 COPY --from=checkout-engine /voicevox_engine/LICENSE /voicevox_engine/run.py ./
 COPY --from=checkout-engine /voicevox_engine/voicevox_engine ./voicevox_engine
@@ -170,9 +169,15 @@ RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION}\
 COPY --from=extract-onnxruntime /opt/onnxruntime /opt/onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
 
+RUN useradd USER
+RUN mkdir -m 1777 /tmp/user_data
+
 COPY --chmod=775 <<EOF /entrypoint.sh
 #!/bin/bash
 set -eu
+
+# Set user_data directory
+export XDG_DATA_HOME=/tmp/user_data
 
 # Display README for engine
 cat /opt/voicevox_engine/README.md > /dev/stderr
