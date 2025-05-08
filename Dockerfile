@@ -6,10 +6,6 @@ ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 ARG PYTHON_VERSION=3.11.9
 ARG RESOURCE_VERSION=0.23.0
 
-ARG ENGINE_VERSION
-ARG CORE_URL
-ARG RUNTIME_URL
-
 FROM scratch AS checkout-engine
 ARG ENGINE_VERSION=master
 ADD https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} /voicevox_engine
@@ -34,7 +30,7 @@ RUN apt-get update && \
 
 COPY --from=download-runtime /onnxruntime.tgz ./
 RUN mkdir -p /opt/onnxruntime
-RUN tar xf "./onnxruntime.tgz" -C "/opt/onnxruntime" --strip-components 1
+RUN tar xf onnxruntime.tgz -C /opt/onnxruntime --strip-components 1
 
 
 FROM scratch AS download-core
@@ -69,18 +65,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y \
       build-essential \
-      libssl-dev \
-      zlib1g-dev \
+      pkg-config \
       libbz2-dev \
+      libffi-dev \
+      liblzma-dev \
+      libncurses5-dev \
       libreadline-dev \
       libsqlite3-dev \
-      libncursesw5-dev \
-      xz-utils \
-      tk-dev \
-      libxml2-dev \
-      libxmlsec1-dev \
-      libffi-dev \
-      liblzma-dev
+      libssl-dev \
+      zlib1g-dev
 
 RUN --mount=target=/tmp/Python.tar.xz,source=/Python.tar.xz,from=download-python \
   tar -xf /tmp/Python.tar.xz --strip-components 1
@@ -102,7 +95,7 @@ WORKDIR /opt/voicevox_engine
 
 COPY --from=ghcr.io/astral-sh/uv /uv /uvx /opt/uv/bin/
 COPY --from=build-python /opt/python /opt/python
-ENV PATH="/opt/uv/bin:$PATH"
+ENV PATH=/opt/uv/bin:$PATH
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -138,7 +131,7 @@ RUN uv run tools/generate_filemap.py --target_dir resources/character_info
 COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
 
 
-FROM ${BASE_RUNTIME_IMAGE} AS runtime-nvidia-env
+FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
 WORKDIR /opt/voicevox_engine
 
 RUN apt-get update && \
@@ -180,7 +173,7 @@ set -eu
 export XDG_DATA_HOME=/tmp/user_data
 
 # Display README for engine
-cat /opt/voicevox_engine/README.md > /dev/stderr
+cat /opt/voicevox_engine/README.md >&2
 
 if [ "$(id -u)" -eq 0 ]; then
   exec gosu USER "\$@"
@@ -191,8 +184,8 @@ EOF
 
 EXPOSE 50021
 ENTRYPOINT [ "/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py" ]
-CMD [ "--use_gpu", "--voicelib_dir", "/opt/voicevox_core", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
-
-
-FROM runtime-nvidia-env AS runtime-env
 CMD [ "--voicelib_dir", "/opt/voicevox_core", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
+
+
+FROM runtime-env AS runtime-nvidia-env
+CMD [ "--use_gpu", "--voicelib_dir", "/opt/voicevox_core", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]

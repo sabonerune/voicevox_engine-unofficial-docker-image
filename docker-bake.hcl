@@ -71,6 +71,7 @@ target "cpu" {
     RUNTIME_URL= runtime_url(arch.runtime, "cpu")
   }
   platforms = [arch.platform]
+  target = "runtime-env"
   tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
 
