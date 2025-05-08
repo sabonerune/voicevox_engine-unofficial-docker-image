@@ -10,21 +10,21 @@ variable "TAG_ENGINE_VERSION" {
 }
 
 variable "CORE_VERSION" {
-  default = "0.15.7"
+  default = "0.16.0"
 }
 
 variable "RUNTIME_VERSION" {
-  default = "1.13.1"
+  default = "1.17.3"
 }
 
 function "core_url" {
-  params = [arch, acceleration]
-  result = "https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-${arch}-${acceleration}-${CORE_VERSION}.zip"
+  params = [arch]
+  result = "https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-${arch}-${CORE_VERSION}.zip"
 }
 
 function "runtime_url" {
   params = [arch, acceleration]
-  result = "https://github.com/microsoft/onnxruntime/releases/download/v${RUNTIME_VERSION}/onnxruntime-linux-${arch}-${notequal("cpu",acceleration) ? "${acceleration}-": ""}${RUNTIME_VERSION}.tgz"
+  result = "https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-${arch}-${notequal("cpu", acceleration)?"${acceleration}-":""}${RUNTIME_VERSION}.tgz"
 }
 
 group "default" {
@@ -48,16 +48,11 @@ target "cpu" {
       },
       {
         name="arm64"
-        runtime = "aarch64"
+        runtime = "arm64"
         platform = "linux/arm64"
       }
     ],
     os = [
-      {
-        name = "ubuntu20"
-        base_image = "mirror.gcr.io/ubuntu:20.04"
-        tag = "ubuntu20.04"
-      },
       {
         name = "ubuntu22"
         base_image = "mirror.gcr.io/ubuntu:22.04"
@@ -67,7 +62,7 @@ target "cpu" {
   }
   args = {
     BASE_IMAGE = os.base_image
-    CORE_URL = core_url(arch.name, "cpu")
+    CORE_URL = core_url(arch.name)
     RUNTIME_URL= runtime_url(arch.runtime, "cpu")
   }
   platforms = [arch.platform]
@@ -80,15 +75,9 @@ target "nvidia" {
   matrix = {
     os = [
       {
-        name = "ubuntu20"
-        base_image = "mirror.gcr.io/ubuntu:20.04"
-        runtime_image = "mirror.gcr.io/nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04"
-        tag = "ubuntu20.04"
-      },
-      {
         name = "ubuntu22"
         base_image = "mirror.gcr.io/ubuntu:22.04"
-        runtime_image = "mirror.gcr.io/nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04"
+        runtime_image = "mirror.gcr.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04"
         tag = "ubuntu22.04"
       }
     ]
@@ -96,8 +85,8 @@ target "nvidia" {
   args = {
     BASE_IMAGE = os.base_image
     BASE_RUNTIME_IMAGE = os.runtime_image
-    CORE_URL = core_url("x64", "gpu")
-    RUNTIME_URL= runtime_url("x64", "gpu")
+    CORE_URL = core_url("x64")
+    RUNTIME_URL= runtime_url("x64", "cuda")
   }
   target = "runtime-nvidia-env"
   tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]

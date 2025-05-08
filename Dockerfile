@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
 
-ARG BASE_IMAGE=mirror.gcr.io/ubuntu:20.04
+ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
 ARG PYTHON_VERSION=3.11.9
 ARG RESOURCE_VERSION=0.23.0
+ARG VVM_VERSION=0.1.0
+ARG CUDNN_VERSION=8.9.7.29
 
 FROM scratch AS checkout-engine
 ARG ENGINE_VERSION=master
@@ -16,9 +18,14 @@ ARG RESOURCE_VERSION
 ADD https://github.com/VOICEVOX/voicevox_resource.git#${RESOURCE_VERSION} .
 
 
+FROM scratch AS checkout-vvm
+ARG VVM_VERSION
+ADD https://github.com/VOICEVOX/voicevox_vvm.git#${VVM_VERSION} .
+
+
 FROM scratch AS download-runtime
 ARG RUNTIME_URL
-ADD ${RUNTIME_URL} onnxruntime.tgz
+ADD ${RUNTIME_URL} voicevox_onnxruntime.tgz
 
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-onnxruntime
@@ -28,9 +35,9 @@ RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y tar
 
-COPY --from=download-runtime /onnxruntime.tgz ./
-RUN mkdir -p /opt/onnxruntime
-RUN tar xf onnxruntime.tgz -C /opt/onnxruntime --strip-components 1
+RUN mkdir -p /opt/voicevox_onnxruntime
+RUN --mount=target=/tmp/voicevox_onnxruntime.tgz,source=/voicevox_onnxruntime.tgz,from=download-runtime \
+  tar -xf /tmp/voicevox_onnxruntime.tgz -C /opt/voicevox_onnxruntime --strip-components 1
 
 
 FROM scratch AS download-core
@@ -45,9 +52,31 @@ RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y unzip
 
-COPY --from=download-core /voicevox_core.zip ./
-RUN unzip voicevox_core.zip
+RUN --mount=target=/tmp/voicevox_core.zip,source=/voicevox_core.zip,from=download-core \
+  unzip /tmp/voicevox_core.zip
 RUN mv voicevox_core-linux-* /opt/voicevox_core
+
+
+FROM scratch AS download-cudnn
+ARG CUDNN_VERSION
+ADD https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz cudnn.tar.xz
+
+
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-cudnn
+WORKDIR /work
+
+RUN apt-get update && \
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get install -y tar xz-utils
+
+RUN mkdir -p /opt/cudnn
+RUN --mount=target=/tmp/cudnn.tar.xz,source=/cudnn.tar.xz,from=download-cudnn \
+  tar -xf /tmp/cudnn.tar.xz \
+    -C /opt/cudnn \
+    --strip-components 1 \
+    --wildcards "*/libcudnn.so*" \
+    --wildcards "*/libcudnn_*_infer.so*" \
+    --wildcards "*/LICENSE"
 
 
 FROM scratch AS download-python
@@ -138,11 +167,11 @@ RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y \
     gosu \
-    openssl &&\
+    libssl3 &&\
   apt-get clean &&\
   rm -rf /var/lib/apt/lists/*
 
-COPY --from=checkout-engine /voicevox_engine/LICENSE /voicevox_engine/run.py ./
+COPY --from=checkout-engine /voicevox_engine/LGPL_LICENSE /voicevox_engine/LICENSE /voicevox_engine/run.py ./
 COPY --from=checkout-engine /voicevox_engine/voicevox_engine ./voicevox_engine
 
 COPY --from=checkout-resource /engine/README.md .
@@ -159,8 +188,10 @@ ARG ENGINE_VERSION=latest
 RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${ENGINE_VERSION}\"/" voicevox_engine/__init__.py
 RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION}\"/" engine_manifest.json
 
-COPY --from=extract-onnxruntime /opt/onnxruntime /opt/onnxruntime
+COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
+COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
+COPY --from=checkout-vvm /README.md /TERMS.txt /opt/voicevox_vvm/
 
 RUN useradd USER
 RUN mkdir -m 1777 /tmp/user_data
@@ -171,6 +202,9 @@ set -eu
 
 # Set user_data directory
 export XDG_DATA_HOME=/tmp/user_data
+
+# Set vvm directory
+export VV_MODELS_ROOT_DIR=/opt/voicevox_vvm/vvms
 
 # Display README for engine
 cat /opt/voicevox_engine/README.md >&2
@@ -183,9 +217,13 @@ fi
 EOF
 
 EXPOSE 50021
-ENTRYPOINT [ "/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py" ]
-CMD [ "--voicelib_dir", "/opt/voicevox_core", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
+ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
+CMD ["--voicelib_dir", "/opt/voicevox_core/lib", "--runtime_dir", "/opt/voicevox_onnxruntime/lib", "--host", "0.0.0.0"]
 
 
 FROM runtime-env AS runtime-nvidia-env
-CMD [ "--use_gpu", "--voicelib_dir", "/opt/voicevox_core", "--runtime_dir", "/opt/onnxruntime/lib", "--host", "0.0.0.0" ]
+
+COPY --from=extract-cudnn /opt/cudnn /opt/cudnn
+RUN echo "/opt/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && ldconfig
+
+CMD ["--use_gpu", "--voicelib_dir", "/opt/voicevox_core/lib", "--runtime_dir", "/opt/voicevox_onnxruntime/lib", "--host", "0.0.0.0"]
