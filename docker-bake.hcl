@@ -91,3 +91,36 @@ target "nvidia" {
   target = "runtime-nvidia-env"
   tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
+
+target "cpu-package-x64" {
+  inherits = ["cpu-ubuntu22-x64"]
+  target = "cpu-package"
+  output = [
+    {
+      type = "local"
+      dest = "dist/voicevox_engine-linux-cpu-x64-${TAG_ENGINE_VERSION}"
+    }
+  ]
+}
+
+target "cpu-package-arm64" {
+  inherits = ["cpu-ubuntu22-arm64"]
+  target = "cpu-package"
+  output = [
+    {
+      type = "local"
+      dest = "dist/voicevox_engine-linux-cpu-arm64-${TAG_ENGINE_VERSION}"
+    }
+  ]
+}
+
+target "nvidia-package" {
+  inherits = ["nvidia-ubuntu22"]
+  target = "nvidia-package"
+  output = [
+    {
+      type = "local"
+      dest = "dist/voicevox_engine-linux-cuda-x64-${TAG_ENGINE_VERSION}"
+    }
+  ]
+}

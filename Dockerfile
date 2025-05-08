@@ -7,6 +7,9 @@ ARG RESOURCE_VERSION=0.23.0
 ARG VVM_VERSION=0.1.0
 ARG CUDNN_VERSION=8.9.7.29
 
+ARG ENGINE_VERSION
+ARG ENGINE_VERSION_FOR_CODE=${ENGINE_VERSION:-latest}
+
 FROM scratch AS checkout-engine
 ARG ENGINE_VERSION=master
 ADD https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} /voicevox_engine
@@ -99,6 +102,9 @@ COPY --from=checkout-engine /voicevox_engine /opt/voicevox_engine
 RUN uv sync --managed-python
 RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
 
+ARG ENGINE_VERSION_FOR_CODE
+RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${ENGINE_VERSION_FOR_CODE}\"/" voicevox_engine/__init__.py
+
 
 FROM build-env AS gen-licenses-env
 RUN OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
@@ -118,6 +124,58 @@ RUN uv run tools/generate_filemap.py --target_dir resources/character_info
 
 COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
 
+ARG ENGINE_VERSION_FOR_CODE
+RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION_FOR_CODE}\"/" engine_manifest.json
+
+
+FROM build-env AS build-engine
+WORKDIR /opt/voicevox_engine
+
+COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
+
+COPY --from=prepare-resource /opt/voicevox_engine/resources ./resources
+COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
+
+COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
+COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
+COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
+
+RUN uv sync --group build
+RUN CORE_MODEL_DIR_PATH=/opt/voicevox_vvm/vvms \
+  LIBCORE_PATH=/opt/voicevox_core/lib/libvoicevox_core.so \
+  LIBONNXRUNTIME_PATH=/opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime.so \
+  uv run -m PyInstaller --noconfirm run.spec
+
+
+FROM scratch AS cpu-package
+COPY --from=build-engine /opt/voicevox_engine/dist/run .
+
+
+FROM ${BASE_RUNTIME_IMAGE} AS gather-cuda
+WORKDIR /work
+
+RUN apt-get update && \
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get install -y patchelf
+
+COPY --from=build-engine /opt/voicevox_engine/dist ./dist
+COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
+COPY --from=extract-cudnn /opt/cudnn /opt/cudnn
+
+RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so ./dist/run/
+RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* ./dist/run/
+RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* ./dist/run/
+RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* ./dist/run/
+RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
+RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
+RUN cp /opt/cudnn/lib/libcudnn.so.* ./dist/run/
+RUN cp /opt/cudnn/lib/libcudnn_*_infer.so.* ./dist/run/
+
+RUN patchelf --set-rpath '$ORIGIN' /work/dist/run/libvoicevox_onnxruntime_providers_*.so
+
+FROM scratch AS nvidia-package
+COPY --from=gather-cuda /work/dist/run .
+
 
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
 WORKDIR /opt/voicevox_engine
@@ -129,7 +187,7 @@ RUN apt-get update && \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=checkout-engine /voicevox_engine/LGPL_LICENSE /voicevox_engine/LICENSE /voicevox_engine/run.py ./
-COPY --from=checkout-engine /voicevox_engine/voicevox_engine ./voicevox_engine
+COPY --from=build-env /opt/voicevox_engine/voicevox_engine ./voicevox_engine
 
 COPY --from=checkout-resource /engine/README.md .
 
@@ -140,10 +198,6 @@ COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
 
 COPY --from=prepare-resource /opt/voicevox_engine/resources ./resources
 COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
-
-ARG ENGINE_VERSION=latest
-RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${ENGINE_VERSION}\"/" voicevox_engine/__init__.py
-RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION}\"/" engine_manifest.json
 
 COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
