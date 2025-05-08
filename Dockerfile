@@ -3,7 +3,6 @@
 ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
-ARG PYTHON_VERSION=3.11.9
 ARG RESOURCE_VERSION=0.23.0
 ARG VVM_VERSION=0.1.0
 ARG CUDNN_VERSION=8.9.7.29
@@ -79,52 +78,12 @@ RUN --mount=target=/tmp/cudnn.tar.xz,source=/cudnn.tar.xz,from=download-cudnn \
     --wildcards "*/LICENSE"
 
 
-FROM scratch AS download-python
-ARG PYTHON_VERSION
-ADD https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz ./Python.tar.xz
-
-
-FROM ${BASE_IMAGE} AS build-python
-WORKDIR /work
-
-RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-  --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y \
-      build-essential \
-      pkg-config \
-      libbz2-dev \
-      libffi-dev \
-      liblzma-dev \
-      libncurses5-dev \
-      libreadline-dev \
-      libsqlite3-dev \
-      libssl-dev \
-      zlib1g-dev
-
-RUN --mount=target=/tmp/Python.tar.xz,source=/Python.tar.xz,from=download-python \
-  tar -xf /tmp/Python.tar.xz --strip-components 1
-
-RUN <<EOF
-  # Build Python
-  set -eux
-  ./configure \
-    --prefix=/opt/python \
-    --enable-shared \
-    --enable-optimizations \
-    LDFLAGS='-Wl,-rpath,\$$ORIGIN/../lib'
-  make install
-EOF
-
-
 FROM ${BASE_IMAGE} AS build-env
 WORKDIR /opt/voicevox_engine
 
 COPY --from=ghcr.io/astral-sh/uv /uv /uvx /opt/uv/bin/
-COPY --from=build-python /opt/python /opt/python
 ENV PATH=/opt/uv/bin:$PATH
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -137,7 +96,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY --from=checkout-engine /voicevox_engine /opt/voicevox_engine
 
-RUN uv sync --python=/opt/python/bin/python3
+RUN uv sync --managed-python
 RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
 
 
@@ -165,10 +124,8 @@ WORKDIR /opt/voicevox_engine
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y \
-    gosu \
-    libssl3 &&\
-  apt-get clean &&\
+  apt-get install -y gosu && \
+  apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=checkout-engine /voicevox_engine/LGPL_LICENSE /voicevox_engine/LICENSE /voicevox_engine/run.py ./
