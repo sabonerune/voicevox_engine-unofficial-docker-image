@@ -163,15 +163,16 @@ COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxrunt
 COPY --from=extract-cudnn /opt/cudnn /opt/cudnn
 
 RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so ./dist/run/
-RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* ./dist/run/
-RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* ./dist/run/
-RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* ./dist/run/
-RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
-RUN cp /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
-RUN cp /opt/cudnn/lib/libcudnn.so.* ./dist/run/
-RUN cp /opt/cudnn/lib/libcudnn_*_infer.so.* ./dist/run/
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* ./dist/run/
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* ./dist/run/
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* ./dist/run/
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
+RUN cp -P /opt/cudnn/lib/libcudnn.so.* ./dist/run/
+RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* ./dist/run/
 
 RUN patchelf --set-rpath '$ORIGIN' /work/dist/run/libvoicevox_onnxruntime_providers_*.so
+
 
 FROM scratch AS nvidia-package
 COPY --from=gather-cuda /work/dist/run .
@@ -205,14 +206,14 @@ COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
 COPY --from=checkout-vvm /README.md /TERMS.txt /opt/voicevox_vvm/
 
 RUN useradd USER
-RUN mkdir -m 1777 /tmp/user_data
+RUN mkdir -m 1777 /opt/setting
 
 COPY --chmod=775 <<EOF /entrypoint.sh
 #!/bin/bash
 set -eu
 
-# Set user_data directory
-export XDG_DATA_HOME=/tmp/user_data
+# Set setting directory
+export XDG_DATA_HOME=/opt/setting
 
 # Set vvm directory
 export VV_MODELS_ROOT_DIR=/opt/voicevox_vvm/vvms
@@ -228,6 +229,7 @@ fi
 EOF
 
 EXPOSE 50021
+VOLUME ["/opt/setting"]
 ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
 CMD ["--voicelib_dir", "/opt/voicevox_core/lib", "--runtime_dir", "/opt/voicevox_onnxruntime/lib", "--host", "0.0.0.0"]
 

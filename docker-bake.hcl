@@ -1,12 +1,12 @@
 variable "TAG_PREFIX" {
-  default = "voicevox/voicevox_engine"
+  default = "voicevox_engine-unofficial-docker-image"
 }
 
 variable "ENGINE_VERSION" {
 }
 
 variable "TAG_ENGINE_VERSION" {
-  default = notequal("",ENGINE_VERSION) ? ENGINE_VERSION : "dev"
+  default = notequal("", ENGINE_VERSION) ? ENGINE_VERSION : "dev"
 }
 
 variable "CORE_VERSION" {
@@ -24,7 +24,7 @@ function "core_url" {
 
 function "runtime_url" {
   params = [arch, acceleration]
-  result = "https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-${arch}-${notequal("cpu", acceleration)?"${acceleration}-":""}${RUNTIME_VERSION}.tgz"
+  result = "https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-${arch}-${notequal("cpu", acceleration) ? "${acceleration}-" : ""}${RUNTIME_VERSION}.tgz"
 }
 
 group "default" {
