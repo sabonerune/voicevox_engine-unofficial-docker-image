@@ -28,7 +28,11 @@ function "runtime_url" {
 }
 
 group "default" {
-  targets = ["cpu", "nvidia"]
+  targets = ["cpu-ubuntu22-x64", "nvidia"]
+}
+
+group "package" {
+  targets = ["cpu-package-x64", "cpu-package-arm64", "nvidia-package"]
 }
 
 target "_common" {
@@ -38,6 +42,7 @@ target "_common" {
 }
 
 target "cpu" {
+  inherits=["_common"]
   name = "cpu-${os.name}-${arch.name}"
   matrix = {
     arch = [
@@ -71,6 +76,7 @@ target "cpu" {
 }
 
 target "nvidia" {
+  inherits=["_common"]
   name = "nvidia-${os.name}"
   matrix = {
     os = [
