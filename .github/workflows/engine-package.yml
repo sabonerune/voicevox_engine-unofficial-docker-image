@@ -1,0 +1,58 @@
+name: build-engine-package
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENGINE_VERSION:
+        description: "Target Engine version."
+        type: string
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        target:
+          - cpu-package-x64
+          - cpu-package-arm64
+          - nvidia-package
+        include:
+          - os: ubuntu-latest
+          - target: cpu-package-arm64
+            os: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/bake-action@v6
+        with:
+          targets: ${{ matrix.target }}
+        env:
+          ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
+
+      - name: Artifact name
+        id: artifact-name
+        run: |
+          version=${{ inputs.ENGINE_VERSION }}
+          if [[ ${{ matrix.target }} =~ ^nvidia-.* ]]; then
+            acceleration=gpu
+          else
+            acceleration=cpu
+          fi
+          if [[ ${{ matrix.target }} =~ .*-arm64$ ]]; then
+            arch=arm64
+          else
+            arch=x64
+          fi
+          echo "ARTIFACT_NAME=voicevox_engine-linux-${acceleration}-${arch}-${version:-dev}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-name.outputs.ARTIFACT_NAME }}
+          path: dist/voicevox_engine-*/*
+          if-no-files-found: error
