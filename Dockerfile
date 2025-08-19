@@ -61,7 +61,8 @@ RUN mv voicevox_core-linux-* /opt/voicevox_core
 
 FROM scratch AS download-cudnn
 ARG CUDNN_VERSION
-ADD https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz cudnn.tar.xz
+ADD https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz \
+  cudnn.tar.xz
 
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-cudnn
@@ -74,11 +75,11 @@ RUN apt-get update && \
 RUN mkdir -p /opt/cudnn
 RUN --mount=target=/tmp/cudnn.tar.xz,source=/cudnn.tar.xz,from=download-cudnn \
   tar -xf /tmp/cudnn.tar.xz \
-    -C /opt/cudnn \
-    --strip-components 1 \
-    --wildcards "*/libcudnn.so*" \
-    --wildcards "*/libcudnn_*_infer.so*" \
-    --wildcards "*/LICENSE"
+  -C /opt/cudnn \
+  --strip-components 1 \
+  --wildcards "*/libcudnn.so*" \
+  --wildcards "*/libcudnn_*_infer.so*" \
+  --wildcards "*/LICENSE"
 
 
 FROM ${BASE_IMAGE} AS build-env
@@ -94,8 +95,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y \
-    build-essential \
-    git
+  build-essential \
+  git
 
 COPY --from=checkout-engine /voicevox_engine /opt/voicevox_engine
 
@@ -141,41 +142,40 @@ COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
 COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
 
 RUN uv sync --group build
-RUN CORE_MODEL_DIR_PATH=/opt/voicevox_vvm/vvms \
-  LIBCORE_PATH=/opt/voicevox_core/lib/libvoicevox_core.so \
-  LIBONNXRUNTIME_PATH=/opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime.so \
-  uv run -m PyInstaller --noconfirm run.spec
+RUN uv run -m PyInstaller --noconfirm run.spec -- \
+  --libcore_path=/opt/voicevox_core/lib/libvoicevox_core.so \
+  --libonnxruntime_path=/opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime.so \
+  --core_model_dir_path=/opt/voicevox_vvm/vvms
 
 
 FROM scratch AS cpu-package
 COPY --from=build-engine /opt/voicevox_engine/dist/run .
 
 
-FROM ${BASE_RUNTIME_IMAGE} AS gather-cuda
+FROM ${BASE_IMAGE} AS gather-cuda-lib
 WORKDIR /work
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y patchelf
 
-COPY --from=build-engine /opt/voicevox_engine/dist ./dist
 COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
-COPY --from=extract-cudnn /opt/cudnn /opt/cudnn
-
-RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so ./dist/run/
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* ./dist/run/
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* ./dist/run/
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* ./dist/run/
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* ./dist/run/
-RUN cp -P /opt/cudnn/lib/libcudnn.so.* ./dist/run/
-RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* ./dist/run/
-
-RUN patchelf --set-rpath '$ORIGIN' /work/dist/run/libvoicevox_onnxruntime_providers_*.so
+RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so .
+RUN patchelf --set-rpath '$ORIGIN' /work/libvoicevox_onnxruntime_providers_*.so
 
 
-FROM scratch AS nvidia-package
-COPY --from=gather-cuda /work/dist/run .
+FROM ${BASE_RUNTIME_IMAGE} AS cuda-runtime-image
+
+FROM cpu-package AS nvidia-package
+
+COPY --from=cuda-runtime-image \
+  /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* \
+  /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* \
+  /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* \
+  /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* \
+  ./
+COPY --from=extract-cudnn /opt/cudnn/lib/libcudnn.so.* /opt/cudnn/lib/libcudnn_*_infer.so.* ./
+COPY --from=gather-cuda-lib /work/* ./
 
 
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
