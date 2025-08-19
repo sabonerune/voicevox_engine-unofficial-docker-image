@@ -149,10 +149,10 @@ RUN uv run -m PyInstaller --noconfirm run.spec -- \
 
 
 FROM scratch AS cpu-package
-COPY --from=build-engine /opt/voicevox_engine/dist/run .
+COPY --from=build-engine /opt/voicevox_engine/dist/run /run
 
 
-FROM ${BASE_IMAGE} AS gather-cuda-lib
+FROM ${BASE_RUNTIME_IMAGE} AS gather-cuda-lib
 WORKDIR /work
 
 RUN apt-get update && \
@@ -163,19 +163,17 @@ COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxrunt
 RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so .
 RUN patchelf --set-rpath '$ORIGIN' /work/libvoicevox_onnxruntime_providers_*.so
 
+COPY --from=extract-cudnn /opt/cudnn/lib /opt/cudnn/lib
+RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* .
 
-FROM ${BASE_RUNTIME_IMAGE} AS cuda-runtime-image
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* .
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* .
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* .
+RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* .
 
 FROM cpu-package AS nvidia-package
 
-COPY --from=cuda-runtime-image \
-  /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* \
-  /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* \
-  /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* \
-  /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* \
-  ./
-COPY --from=extract-cudnn /opt/cudnn/lib/libcudnn.so.* /opt/cudnn/lib/libcudnn_*_infer.so.* ./
-COPY --from=gather-cuda-lib /work/* ./
+COPY --from=gather-cuda-lib /work /run
 
 
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
