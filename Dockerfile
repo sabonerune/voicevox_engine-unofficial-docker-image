@@ -3,8 +3,8 @@
 ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
-ARG RESOURCE_VERSION=0.23.0
-ARG VVM_VERSION=0.1.0
+ARG RESOURCE_VERSION=0.24.1
+ARG VVM_VERSION=0.16.0
 ARG CUDNN_VERSION=8.9.7.29
 
 ARG ENGINE_VERSION
@@ -20,9 +20,21 @@ ARG RESOURCE_VERSION
 ADD https://github.com/VOICEVOX/voicevox_resource.git#${RESOURCE_VERSION} .
 
 
-FROM scratch AS checkout-vvm
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS download-vvm
 ARG VVM_VERSION
-ADD https://github.com/VOICEVOX/voicevox_vvm.git#${VVM_VERSION} .
+WORKDIR /vvm
+
+RUN apt-get update && \
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get install -y jq wget
+
+RUN <<EOF
+# Download VVM
+set -eux
+wget -O - https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} \
+| jq '.assets[].browser_download_url' \
+| xargs -n1 wget
+EOF
 
 
 FROM scratch AS download-runtime
@@ -139,7 +151,7 @@ COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_
 
 COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
-COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
+COPY --from=download-vvm /vvm/*.vvm /opt/voicevox_vvm/vvms/
 
 RUN uv sync --group build
 RUN uv run -m PyInstaller --noconfirm run.spec -- \
@@ -200,8 +212,8 @@ COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_
 
 COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
-COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
-COPY --from=checkout-vvm /README.md /TERMS.txt /opt/voicevox_vvm/
+COPY --from=download-vvm /vvm/*.vvm /opt/voicevox_vvm/vvms/
+COPY --from=download-vvm /vvm/README.txt /vvm/TERMS.txt /opt/voicevox_vvm/
 
 RUN useradd USER
 RUN mkdir -m 1777 /opt/setting
