@@ -173,9 +173,9 @@ COPY --from=cuda-runtime-image \
   /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* \
   /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* \
   /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* \
-  /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* \
   ./
 COPY --from=extract-cudnn /opt/cudnn/lib/libcudnn.so.* /opt/cudnn/lib/libcudnn_*_infer.so.* ./
+COPY --from=gather-cuda-lib /work/* ./
 
 
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
