@@ -142,10 +142,10 @@ COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
 COPY --from=checkout-vvm /vvms /opt/voicevox_vvm/vvms
 
 RUN uv sync --group build
-RUN CORE_MODEL_DIR_PATH=/opt/voicevox_vvm/vvms \
-  LIBCORE_PATH=/opt/voicevox_core/lib/libvoicevox_core.so \
-  LIBONNXRUNTIME_PATH=/opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime.so \
-  uv run -m PyInstaller --noconfirm run.spec
+RUN uv run -m PyInstaller --noconfirm run.spec -- \
+  --libcore_path=/opt/voicevox_core/lib/libvoicevox_core.so \
+  --libonnxruntime_path=/opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime.so \
+  --core_model_dir_path=/opt/voicevox_vvm/vvms
 
 
 FROM scratch AS cpu-package
