@@ -219,30 +219,49 @@ COPY --from=download-vvm /vvm/README.txt /vvm/TERMS.txt /opt/voicevox_vvm/
 RUN useradd USER
 RUN mkdir -m 1777 /opt/setting
 
-COPY --chmod=775 <<EOF /entrypoint.sh
+COPY --chmod=755 <<EOF /entrypoint.sh
 #!/bin/bash
 set -eu
 
 # Set setting directory
-export XDG_DATA_HOME=/opt/setting
+export XDG_DATA_HOME=\${XDG_DATA_HOME:-/opt/setting}
 
-# Set vvm directory
-export VV_MODELS_ROOT_DIR=/opt/voicevox_vvm/vvms
+args=("\$@")
+set_voicelib_dir=0
+set_runtime_dir=0
+for arg in "\$@";do
+  if [[ \$arg =~ ^--voicevox_dir(=.*)* || \$arg =~ ^--voicelib_dir(=.*)* ]] ;then
+    set_voicelib_dir=1
+  elif  [[ \$arg =~ --runtime_dir(=.*)* ]] ;then
+    set_runtime_dir=1
+  fi
+done
+
+if [[ \$set_voicelib_dir == 0 ]] ;then
+  # Set default voicelib directory
+  args+=("--voicelib_dir" "/opt/voicevox_core/lib")
+  export VV_MODELS_ROOT_DIR=\${VV_MODELS_ROOT_DIR:-/opt/voicevox_vvm/vvms}
+fi
+
+if [[ \$set_runtime_dir == 0 ]] ;then
+  # Set default runtime directory
+  args+=("--runtime_dir" "/opt/voicevox_onnxruntime/lib")
+fi
 
 # Display README for engine
 cat /opt/voicevox_engine/README.md >&2
 
 if [ "$(id -u)" -eq 0 ]; then
-  exec gosu USER "\$@"
+  exec gosu USER "\${args[@]}"
 else
-  exec "\$@"
+  exec "\${args[@]}"
 fi
 EOF
 
 EXPOSE 50021
 VOLUME ["/opt/setting"]
 ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
-CMD ["--voicelib_dir", "/opt/voicevox_core/lib", "--runtime_dir", "/opt/voicevox_onnxruntime/lib", "--host", "0.0.0.0"]
+CMD ["--host", "0.0.0.0"]
 
 
 FROM runtime-env AS runtime-nvidia-env
@@ -250,4 +269,4 @@ FROM runtime-env AS runtime-nvidia-env
 COPY --from=extract-cudnn /opt/cudnn /opt/cudnn
 RUN echo "/opt/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && ldconfig
 
-CMD ["--use_gpu", "--voicelib_dir", "/opt/voicevox_core/lib", "--runtime_dir", "/opt/voicevox_onnxruntime/lib", "--host", "0.0.0.0"]
+CMD ["--use_gpu", "--host", "0.0.0.0"]
