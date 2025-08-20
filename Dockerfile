@@ -176,6 +176,7 @@ RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so .
 RUN patchelf --set-rpath '$ORIGIN' /work/libvoicevox_onnxruntime_providers_*.so
 
 COPY --from=extract-cudnn /opt/cudnn/lib /opt/cudnn/lib
+RUN cp -P /opt/cudnn/lib/libcudnn.so.* .
 RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* .
 
 RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* .
