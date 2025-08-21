@@ -29,11 +29,11 @@ RUN apt-get update && \
   apt-get install -y jq wget
 
 RUN <<EOF
-# Download VVM
-set -eux
-wget -O - https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} \
-| jq '.assets[].browser_download_url' \
-| xargs -n1 wget
+#!/bin/bash
+set -euxo pipefail
+wget --no-verbose --output-document=- https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} | \
+  jq --raw-output '.assets[].browser_download_url' | \
+  wget --no-verbose --input-file=-
 EOF
 
 
@@ -184,6 +184,7 @@ RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* .
 RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* .
 RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* .
 
+
 FROM cpu-package AS nvidia-package
 
 COPY --from=gather-cuda-lib /work /run
@@ -230,7 +231,7 @@ args=("\$@")
 set_voicelib_dir=0
 set_runtime_dir=0
 for arg in "\$@";do
-  if [[ \$arg =~ ^--voicevox_dir(=.*)* || \$arg =~ ^--voicelib_dir(=.*)* ]] ;then
+  if [[ \$arg =~ ^--voice(lib|vox)_dir(=.*)* ]] ;then
     set_voicelib_dir=1
   elif  [[ \$arg =~ --runtime_dir(=.*)* ]] ;then
     set_runtime_dir=1
