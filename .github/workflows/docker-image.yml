@@ -6,9 +6,12 @@ on:
       ENGINE_VERSION:
         description: "Target Engine version."
         type: string
+  push:
+    branches:
+      - main
 
 env:
-  REGISTRY_IMAGE: ghcr.io/sabonerune/voicevox_engine-unofficial-docker-image
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/voicevox_engine-unofficial-docker-image
 
 jobs:
   build:
@@ -45,6 +48,9 @@ jobs:
         with:
           push: true
           targets: ${{ matrix.target }}
+          set: |
+            *.cache-from=type=gha,scope=${{ matrix.target }}
+            *.cache-to=type=gha,scope=${{ matrix.target }}
         env:
           TAG_PREFIX: ${{ env.REGISTRY_IMAGE }}
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
@@ -56,6 +62,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           set: |
+            *.cache-from=type=gha,scope=${{ matrix.target }}
+            *.cache-to=type=gha,scope=${{ matrix.target }}
             *.output=type=image,push-by-digest=true,name-canonical=true,push=true
             *.tags=${{ env.REGISTRY_IMAGE }}
         env:
