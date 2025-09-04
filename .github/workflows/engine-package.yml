@@ -11,13 +11,22 @@ jobs:
   build:
     strategy:
       matrix:
-        target:
-          - cpu-package-x64
-          - cpu-package-arm64
-          - nvidia-package
+        target-key:
+          - cpu-ubuntu22-x64
+          - cpu-ubuntu22-arm64
+          - nvidia-ubuntu22
         include:
-          - os: ubuntu-latest
-          - target: cpu-package-arm64
+          - target-key: cpu-ubuntu22-x64
+            target: cpu-package
+            platform: linux/amd64
+            os: ubuntu-latest
+          - target-key: nvidia-ubuntu22
+            target: nvidia-package
+            platform: linux/amd64
+            os: ubuntu-latest
+          - target-key: cpu-ubuntu22-arm64
+            target: cpu-package
+            platform: linux/arm64
             os: ubuntu-24.04-arm
 
     runs-on: ${{ matrix.os }}
@@ -31,12 +40,12 @@ jobs:
         id: artifact-name
         run: |
           version=${{ inputs.ENGINE_VERSION }}
-          if [[ ${{ matrix.target }} =~ ^nvidia-.* ]]; then
+          if [[ ${{ matrix.target-key }} =~ ^nvidia-.* ]]; then
             acceleration=cuda
           else
             acceleration=cpu
           fi
-          if [[ ${{ matrix.target }} =~ .*-arm64$ ]]; then
+          if [[ ${{ matrix.target-key }} =~ .*-arm64$ ]]; then
             arch=arm64
           else
             arch=x64
@@ -45,7 +54,10 @@ jobs:
 
       - name: Build
         run: |
-          docker buildx bake ${{ matrix.target }} --set=*.output=type=tar,dest=- | \
+          set -o pipefail
+          docker buildx bake ${{ matrix.target }} \
+            --set=*.output=type=tar,dest=- \
+            --set=*.platform=${{ matrix.platform }} | \
           xz --compress > dist/${{ steps.artifact-name.outputs.ARTIFACT_NAME }}.tar.xz
         env:
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}

@@ -3,6 +3,9 @@
 ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
+ARG CORE_VERSION=0.16.0
+ARG RUNTIME_VERSION=1.17.3
+ARG RUNTIME_ACCELERATION=cpu
 ARG RESOURCE_VERSION=0.24.1
 ARG VVM_VERSION=0.16.0
 ARG CUDNN_VERSION=8.9.7.29
@@ -37,9 +40,25 @@ wget --no-verbose --output-document=- https://api.github.com/repos/VOICEVOX/voic
 EOF
 
 
-FROM scratch AS download-runtime
-ARG RUNTIME_URL
-ADD ${RUNTIME_URL} voicevox_onnxruntime.tgz
+FROM scratch AS download-runtime-cpu-amd64
+ARG RUNTIME_VERSION
+ADD https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-${RUNTIME_VERSION}.tgz \
+  voicevox_onnxruntime.tgz
+
+
+FROM scratch AS download-runtime-cpu-arm64
+ARG RUNTIME_VERSION
+ADD https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-arm64-${RUNTIME_VERSION}.tgz \
+  voicevox_onnxruntime.tgz
+
+
+FROM scratch AS download-runtime-cuda-amd64
+ARG RUNTIME_VERSION
+ADD https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-cuda-${RUNTIME_VERSION}.tgz \
+  voicevox_onnxruntime.tgz
+
+
+FROM download-runtime-${RUNTIME_ACCELERATION}-${TARGETARCH} AS download-runtime
 
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-onnxruntime
@@ -54,9 +73,19 @@ RUN --mount=target=/tmp/voicevox_onnxruntime.tgz,source=/voicevox_onnxruntime.tg
   tar -xf /tmp/voicevox_onnxruntime.tgz -C /opt/voicevox_onnxruntime --strip-components 1
 
 
-FROM scratch AS download-core
-ARG CORE_URL
-ADD ${CORE_URL} voicevox_core.zip
+FROM scratch AS download-core-amd64
+ARG CORE_VERSION
+ADD https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-x64-${CORE_VERSION}.zip \
+  voicevox_core.zip
+
+
+FROM scratch AS download-core-arm64
+ARG CORE_VERSION
+ADD https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-arm64-${CORE_VERSION}.zip \
+  voicevox_core.zip
+
+
+FROM download-core-${TARGETARCH} AS download-core
 
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-core
@@ -71,10 +100,13 @@ RUN --mount=target=/tmp/voicevox_core.zip,source=/voicevox_core.zip,from=downloa
 RUN mv voicevox_core-linux-* /opt/voicevox_core
 
 
-FROM scratch AS download-cudnn
+FROM scratch AS download-cudnn-amd64
 ARG CUDNN_VERSION
 ADD https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz \
   cudnn.tar.xz
+
+
+FROM download-cudnn-${TARGETARCH} AS download-cudnn
 
 
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-cudnn
@@ -179,10 +211,10 @@ COPY --from=extract-cudnn /opt/cudnn/lib /opt/cudnn/lib
 RUN cp -P /opt/cudnn/lib/libcudnn.so.* .
 RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* .
 
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublas.so.* .
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcublasLt.so.* .
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcudart.so.* .
-RUN cp -P /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.* .
+RUN cp -P /usr/local/cuda/lib64/libcublas.so.* .
+RUN cp -P /usr/local/cuda/lib64/libcublasLt.so.* .
+RUN cp -P /usr/local/cuda/lib64/libcudart.so.* .
+RUN cp -P /usr/local/cuda/lib64/libcufft.so.* .
 
 
 FROM cpu-package AS nvidia-package

@@ -9,30 +9,12 @@ variable "TAG_ENGINE_VERSION" {
   default = notequal("", ENGINE_VERSION) ? ENGINE_VERSION : "dev"
 }
 
-variable "CORE_VERSION" {
-  default = "0.16.0"
-}
-
-variable "RUNTIME_VERSION" {
-  default = "1.17.3"
-}
-
-function "core_url" {
-  params = [arch]
-  result = "https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-${arch}-${CORE_VERSION}.zip"
-}
-
-function "runtime_url" {
-  params = [arch, acceleration]
-  result = "https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-${arch}-${notequal("cpu", acceleration) ? "${acceleration}-" : ""}${RUNTIME_VERSION}.tgz"
-}
-
 group "default" {
-  targets = ["cpu-ubuntu22-x64", "nvidia"]
+  targets = ["cpu", "nvidia"]
 }
 
 group "package" {
-  targets = ["cpu-package-x64", "cpu-package-arm64", "nvidia-package"]
+  targets = ["cpu-package", "nvidia-package"]
 }
 
 target "_common" {
@@ -43,20 +25,8 @@ target "_common" {
 
 target "cpu" {
   inherits=["_common"]
-  name = "cpu-${os.name}-${arch.name}"
+  name = "cpu-${os.name}"
   matrix = {
-    arch = [
-      {
-        name="x64"
-        runtime = "x64"
-        platform = "linux/amd64"
-      },
-      {
-        name="arm64"
-        runtime = "arm64"
-        platform = "linux/arm64"
-      }
-    ],
     os = [
       {
         name = "ubuntu22"
@@ -67,10 +37,8 @@ target "cpu" {
   }
   args = {
     BASE_IMAGE = os.base_image
-    CORE_URL = core_url(arch.name)
-    RUNTIME_URL= runtime_url(arch.runtime, "cpu")
   }
-  platforms = [arch.platform]
+  platforms = ["linux/amd64", "linux/arm64"]
   target = "runtime-env"
   tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
@@ -91,31 +59,19 @@ target "nvidia" {
   args = {
     BASE_IMAGE = os.base_image
     BASE_RUNTIME_IMAGE = os.runtime_image
-    CORE_URL = core_url("x64")
-    RUNTIME_URL= runtime_url("x64", "cuda")
+    RUNTIME_ACCELERATION="cuda"
   }
   target = "runtime-nvidia-env"
   tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
 
-target "cpu-package-x64" {
-  inherits = ["cpu-ubuntu22-x64"]
+target "cpu-package" {
+  inherits = ["cpu-ubuntu22"]
   target = "cpu-package"
   output = [
     {
       type = "local"
-      dest = "dist/voicevox_engine-linux-cpu-x64-${TAG_ENGINE_VERSION}"
-    }
-  ]
-}
-
-target "cpu-package-arm64" {
-  inherits = ["cpu-ubuntu22-arm64"]
-  target = "cpu-package"
-  output = [
-    {
-      type = "local"
-      dest = "dist/voicevox_engine-linux-cpu-arm64-${TAG_ENGINE_VERSION}"
+      dest = "dist/voicevox_engine-linux-cpu-${TAG_ENGINE_VERSION}"
     }
   ]
 }
@@ -126,7 +82,7 @@ target "nvidia-package" {
   output = [
     {
       type = "local"
-      dest = "dist/voicevox_engine-linux-cuda-x64-${TAG_ENGINE_VERSION}"
+      dest = "dist/voicevox_engine-linux-cuda-${TAG_ENGINE_VERSION}"
     }
   ]
 }
