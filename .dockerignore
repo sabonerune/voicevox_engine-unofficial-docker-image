@@ -1,0 +1,7 @@
+.git
+.github
+dist
+.dockerignore
+docker-bake.hcl
+Dockerfile
+LICENSE
