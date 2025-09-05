@@ -6,7 +6,7 @@ variable "ENGINE_VERSION" {
 }
 
 variable "TAG_ENGINE_VERSION" {
-  default = notequal("", ENGINE_VERSION) ? ENGINE_VERSION : "dev"
+  default = equal(ENGINE_VERSION, "") ? "dev" : ENGINE_VERSION
 }
 
 group "default" {
@@ -19,7 +19,7 @@ group "package" {
 
 target "_common" {
   args = {
-    ENGINE_VERSION = ENGINE_VERSION
+    ENGINE_VERSION = equal(ENGINE_VERSION, "") ? null : ENGINE_VERSION
   }
 }
 

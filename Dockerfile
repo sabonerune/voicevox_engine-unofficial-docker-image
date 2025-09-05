@@ -165,6 +165,7 @@ COPY --from=checkout-resource /character_info /tmp/resource/character_info
 COPY --from=checkout-resource /scripts/clean_character_info.py /tmp/resource/scripts/
 COPY --from=checkout-resource /engine /tmp/resource/engine
 
+RUN unlink ./resources/engine_manifest_assets/downloadable_libraries.json
 RUN DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
 
 RUN uv run tools/generate_filemap.py --target_dir resources/character_info
