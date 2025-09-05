@@ -38,6 +38,8 @@ wget --no-verbose --output-document=- https://api.github.com/repos/VOICEVOX/voic
   jq --raw-output '.assets[].browser_download_url' | \
   wget --no-verbose --input-file=-
 EOF
+RUN mkdir ./vvms
+RUN mv ./*.vvm ./vvms/
 
 
 FROM scratch AS download-runtime-cpu-amd64
@@ -183,7 +185,7 @@ COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_
 
 COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
-COPY --from=download-vvm /vvm/*.vvm /opt/voicevox_vvm/vvms/
+COPY --from=download-vvm /vvm/vvms /opt/voicevox_vvm/vvms
 
 RUN uv sync --group build
 RUN uv run -m PyInstaller --noconfirm run.spec -- \
@@ -218,7 +220,6 @@ RUN cp -P /usr/local/cuda/lib64/libcufft.so.* .
 
 
 FROM cpu-package AS nvidia-package
-
 COPY --from=gather-cuda-lib /work /run
 
 
@@ -231,65 +232,24 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-COPY --from=checkout-engine /voicevox_engine/LGPL_LICENSE /voicevox_engine/LICENSE /voicevox_engine/run.py ./
-COPY --from=build-env /opt/voicevox_engine/voicevox_engine ./voicevox_engine
-
-COPY --from=checkout-resource /engine/README.md .
-
-COPY --from=build-env /opt/python /opt/python
+COPY --from=build-env /opt/voicevox_engine/LGPL_LICENSE /opt/voicevox_engine/LICENSE /opt/voicevox_engine/run.py ./
 COPY --from=build-env /opt/voicevox_engine/.venv ./.venv
+COPY --from=build-env /opt/voicevox_engine/voicevox_engine ./voicevox_engine
+COPY --from=build-env /opt/python /opt/python
 
 COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
-
+COPY --from=checkout-resource /engine/README.md ./README.md
 COPY --from=prepare-resource /opt/voicevox_engine/resources ./resources
 COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
 
 COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
-COPY --from=download-vvm /vvm/*.vvm /opt/voicevox_vvm/vvms/
-COPY --from=download-vvm /vvm/README.txt /vvm/TERMS.txt /opt/voicevox_vvm/
+COPY --from=download-vvm /vvm /opt/voicevox_vvm
 
 RUN useradd USER
 RUN mkdir -m 1777 /opt/setting
 
-COPY --chmod=755 <<EOF /entrypoint.sh
-#!/bin/bash
-set -eu
-
-# Set setting directory
-export XDG_DATA_HOME=\${XDG_DATA_HOME:-/opt/setting}
-
-args=("\$@")
-set_voicelib_dir=0
-set_runtime_dir=0
-for arg in "\$@";do
-  if [[ \$arg =~ ^--voice(lib|vox)_dir(=.*)* ]] ;then
-    set_voicelib_dir=1
-  elif  [[ \$arg =~ --runtime_dir(=.*)* ]] ;then
-    set_runtime_dir=1
-  fi
-done
-
-if [[ \$set_voicelib_dir == 0 ]] ;then
-  # Set default voicelib directory
-  args+=("--voicelib_dir" "/opt/voicevox_core/lib")
-  export VV_MODELS_ROOT_DIR=\${VV_MODELS_ROOT_DIR:-/opt/voicevox_vvm/vvms}
-fi
-
-if [[ \$set_runtime_dir == 0 ]] ;then
-  # Set default runtime directory
-  args+=("--runtime_dir" "/opt/voicevox_onnxruntime/lib")
-fi
-
-# Display README for engine
-cat /opt/voicevox_engine/README.md >&2
-
-if [ "$(id -u)" -eq 0 ]; then
-  exec gosu USER "\${args[@]}"
-else
-  exec "\${args[@]}"
-fi
-EOF
+COPY --chmod=755 entrypoint.sh /
 
 EXPOSE 50021
 VOLUME ["/opt/setting"]
