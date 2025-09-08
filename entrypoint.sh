@@ -13,7 +13,7 @@ for arg in "$@"; do
 		set_voicevox_dir=0
 	elif [[ "$arg" =~ ^--voicelib_dir(=.*)?$ ]]; then
 		set_voicelib_dir=0
-	elif [[ "$arg" =~ --runtime_dir(=.*)?$ ]]; then
+	elif [[ "$arg" =~ ^--runtime_dir(=.*)?$ ]]; then
 		set_runtime_dir=0
 	fi
 done
