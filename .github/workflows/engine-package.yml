@@ -11,10 +11,6 @@ jobs:
   build:
     strategy:
       matrix:
-        target-key:
-          - cpu-ubuntu22-x64
-          - cpu-ubuntu22-arm64
-          - nvidia-ubuntu22
         include:
           - target-key: cpu-ubuntu22-x64
             target: cpu-package
