@@ -131,10 +131,6 @@ RUN --mount=target=/tmp/cudnn.tar.xz,source=/cudnn.tar.xz,from=download-cudnn \
 FROM ${BASE_IMAGE} AS build-env
 WORKDIR /opt/voicevox_engine
 
-COPY --from=ghcr.io/astral-sh/uv /uv /uvx /opt/uv/bin/
-ENV PATH=/opt/uv/bin:$PATH
-ENV UV_PYTHON_INSTALL_DIR=/opt/python
-
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -144,7 +140,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   build-essential \
   git
 
-COPY --from=checkout-engine /voicevox_engine /opt/voicevox_engine
+COPY --from=ghcr.io/astral-sh/uv --link /uv /uvx /opt/uv/bin/
+ENV PATH=/opt/uv/bin:$PATH
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+
+COPY --from=checkout-engine --link /voicevox_engine /opt/voicevox_engine
 
 RUN uv sync --managed-python
 RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
@@ -161,16 +161,13 @@ RUN OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
 FROM build-env AS prepare-resource
 WORKDIR /opt/voicevox_engine
 
-COPY --from=checkout-resource /character_info /tmp/resource/character_info
-COPY --from=checkout-resource /scripts/clean_character_info.py /tmp/resource/scripts/
-COPY --from=checkout-resource /engine /tmp/resource/engine
-
 RUN unlink ./resources/engine_manifest_assets/downloadable_libraries.json
-RUN DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
+RUN --mount=target=/tmp/resource/,source=/,from=checkout-resource \
+  DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
 
 RUN uv run tools/generate_filemap.py --target_dir resources/character_info
 
-COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
+COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
 
 ARG ENGINE_VERSION_FOR_CODE
 RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION_FOR_CODE}\"/" engine_manifest.json
@@ -179,14 +176,14 @@ RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION_F
 FROM build-env AS build-engine
 WORKDIR /opt/voicevox_engine
 
-COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
+COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./licenses.json
 
-COPY --from=prepare-resource /opt/voicevox_engine/resources ./resources
-COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
+COPY --from=prepare-resource --link /opt/voicevox_engine/resources ./resources
+COPY --from=prepare-resource --link /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
 
-COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
-COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
-COPY --from=download-vvm /vvm/vvms /opt/voicevox_vvm/vvms
+COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
+COPY --from=extract-core --link /opt/voicevox_core /opt/voicevox_core
+COPY --from=download-vvm --link /vvm/vvms /opt/voicevox_vvm/vvms
 
 RUN uv sync --group build
 RUN uv run -m PyInstaller --noconfirm run.spec -- \
@@ -206,11 +203,11 @@ RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install -y patchelf
 
-COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
+COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so .
 RUN patchelf --set-rpath '$ORIGIN' /work/libvoicevox_onnxruntime_providers_*.so
 
-COPY --from=extract-cudnn /opt/cudnn/lib /opt/cudnn/lib
+COPY --from=extract-cudnn --link /opt/cudnn/lib /opt/cudnn/lib
 RUN cp -P /opt/cudnn/lib/libcudnn.so.* .
 RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* .
 
@@ -233,19 +230,19 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-COPY --from=build-env /opt/voicevox_engine/LGPL_LICENSE /opt/voicevox_engine/LICENSE /opt/voicevox_engine/run.py ./
-COPY --from=build-env /opt/voicevox_engine/.venv ./.venv
-COPY --from=build-env /opt/voicevox_engine/voicevox_engine ./voicevox_engine
-COPY --from=build-env /opt/python /opt/python
+COPY --from=build-env --link /opt/voicevox_engine/LGPL_LICENSE /opt/voicevox_engine/LICENSE /opt/voicevox_engine/run.py ./
+COPY --from=build-env --link /opt/voicevox_engine/.venv ./.venv
+COPY --from=build-env --link /opt/voicevox_engine/voicevox_engine ./voicevox_engine
+COPY --from=build-env --link /opt/python /opt/python
 
-COPY --from=gen-licenses-env /opt/voicevox_engine/licenses.json ./licenses.json
-COPY --from=checkout-resource /engine/README.md ./README.md
-COPY --from=prepare-resource /opt/voicevox_engine/resources ./resources
-COPY --from=prepare-resource /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
+COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./licenses.json
+COPY --from=checkout-resource --link /engine/README.md ./README.md
+COPY --from=prepare-resource --link /opt/voicevox_engine/resources ./resources
+COPY --from=prepare-resource --link /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
 
-COPY --from=extract-onnxruntime /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
-COPY --from=extract-core /opt/voicevox_core /opt/voicevox_core
-COPY --from=download-vvm /vvm /opt/voicevox_vvm
+COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
+COPY --from=extract-core --link /opt/voicevox_core /opt/voicevox_core
+COPY --from=download-vvm --link /vvm /opt/voicevox_vvm
 
 RUN useradd USER
 RUN mkdir -m 1777 /opt/setting
@@ -260,7 +257,7 @@ CMD ["--host", "0.0.0.0"]
 
 FROM runtime-env AS runtime-nvidia-env
 
-COPY --from=extract-cudnn /opt/cudnn /opt/cudnn
+COPY --from=extract-cudnn --link /opt/cudnn /opt/cudnn
 RUN echo "/opt/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && ldconfig
 
 CMD ["--use_gpu", "--host", "0.0.0.0"]
