@@ -3,11 +3,11 @@
 ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
-ARG CORE_VERSION=0.16.0
+ARG CORE_VERSION=0.16.2
 ARG RUNTIME_VERSION=1.17.3
 ARG RUNTIME_ACCELERATION=cpu
 ARG RESOURCE_VERSION=0.24.1
-ARG VVM_VERSION=0.16.0
+ARG VVM_VERSION=0.16.1
 ARG CUDNN_VERSION=8.9.7.29
 
 ARG ENGINE_VERSION
@@ -68,7 +68,7 @@ WORKDIR /work
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y tar
+  apt-get install -y tar zlib1g
 
 RUN mkdir -p /opt/voicevox_onnxruntime
 RUN --mount=target=/tmp/voicevox_onnxruntime.tgz,source=/voicevox_onnxruntime.tgz,from=download-runtime \
