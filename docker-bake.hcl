@@ -39,7 +39,7 @@ target "cpu" {
     BASE_IMAGE = os.base_image
   }
   platforms = ["linux/amd64", "linux/arm64"]
-  target = "runtime-env"
+  target = "runtime-cpu-env"
   tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
 

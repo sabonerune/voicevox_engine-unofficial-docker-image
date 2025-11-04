@@ -242,9 +242,7 @@ RUN mkdir -m 1777 /opt/setting
 
 COPY --chmod=755 entrypoint.sh /
 
-# Set default user
 RUN useradd USER
-USER USER
 
 # Set setting directory
 ENV XDG_DATA_HOME=/opt/setting
@@ -253,7 +251,6 @@ VOLUME ["${XDG_DATA_HOME}"]
 EXPOSE 50021
 
 ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
-CMD ["--host", "0.0.0.0"]
 
 
 FROM runtime-env AS runtime-nvidia-env
@@ -261,4 +258,13 @@ FROM runtime-env AS runtime-nvidia-env
 COPY --from=extract-cudnn --link /opt/cudnn /opt/cudnn
 RUN echo "/opt/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && ldconfig
 
+# Set default user
+USER USER
 CMD ["--use_gpu", "--host", "0.0.0.0"]
+
+
+FROM runtime-env AS runtime-cpu-env
+
+# Set default user
+USER USER
+CMD ["--host", "0.0.0.0"]
