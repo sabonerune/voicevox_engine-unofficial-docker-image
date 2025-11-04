@@ -224,12 +224,6 @@ COPY --from=gather-cuda-lib /work /run
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
 WORKDIR /opt/voicevox_engine
 
-RUN apt-get update && \
-  DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y gosu && \
-  apt-get clean && \
-  rm -rf /var/lib/apt/lists/*
-
 COPY --from=build-env --link /opt/voicevox_engine/LGPL_LICENSE /opt/voicevox_engine/LICENSE /opt/voicevox_engine/run.py ./
 COPY --from=build-env --link /opt/voicevox_engine/.venv ./.venv
 COPY --from=build-env --link /opt/voicevox_engine/voicevox_engine ./voicevox_engine
@@ -244,16 +238,19 @@ COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_o
 COPY --from=extract-core --link /opt/voicevox_core /opt/voicevox_core
 COPY --from=download-vvm --link /vvm /opt/voicevox_vvm
 
-RUN useradd USER
 RUN mkdir -m 1777 /opt/setting
 
 COPY --chmod=755 entrypoint.sh /
 
-EXPOSE 50021
+# Set default user
+RUN useradd USER
+USER USER
 
 # Set setting directory
 ENV XDG_DATA_HOME=/opt/setting
 VOLUME ["${XDG_DATA_HOME}"]
+
+EXPOSE 50021
 
 ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
 CMD ["--host", "0.0.0.0"]

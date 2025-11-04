@@ -29,8 +29,4 @@ fi
 # Display README for engine
 cat /opt/voicevox_engine/README.md >&2
 
-if [[ "$(id -u)" == 0 ]]; then
-	exec gosu USER "${args[@]}"
-else
-	exec "${args[@]}"
-fi
+exec "${args[@]}"
