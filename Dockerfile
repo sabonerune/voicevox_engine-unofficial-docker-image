@@ -250,7 +250,11 @@ RUN mkdir -m 1777 /opt/setting
 COPY --chmod=755 entrypoint.sh /
 
 EXPOSE 50021
-VOLUME ["/opt/setting"]
+
+# Set setting directory
+ENV XDG_DATA_HOME=/opt/setting
+VOLUME ["${XDG_DATA_HOME}"]
+
 ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
 CMD ["--host", "0.0.0.0"]
 

@@ -1,9 +1,6 @@
 #!/bin/bash
 set -eu
 
-# Set setting directory
-export XDG_DATA_HOME="${XDG_DATA_HOME:-/opt/setting}"
-
 args=("$@")
 set_voicevox_dir=
 set_voicelib_dir=
