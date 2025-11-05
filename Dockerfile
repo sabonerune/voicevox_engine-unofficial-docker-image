@@ -250,7 +250,9 @@ VOLUME ["${XDG_DATA_HOME}"]
 
 EXPOSE 50021
 
-ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
+ENV VV_MODELS_ROOT_DIR=/opt/voicevox_vvm/vvms
+
+ENTRYPOINT ["/entrypoint.sh", "--voicelib_dir=/opt/voicevox_core/lib", "--runtime_dir=/opt/voicevox_onnxruntime/lib"]
 
 
 FROM runtime-env AS runtime-nvidia-env
