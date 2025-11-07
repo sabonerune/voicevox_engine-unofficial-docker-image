@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
+ARG BASE_IMAGE=ubuntu:22.04
 ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
 
 ARG CORE_VERSION=0.16.2

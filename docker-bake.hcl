@@ -30,7 +30,7 @@ target "cpu" {
     os = [
       {
         name = "ubuntu22"
-        base_image = "mirror.gcr.io/ubuntu:22.04"
+        base_image = "ubuntu:22.04"
         tag = "ubuntu22.04"
       }
     ]
@@ -50,8 +50,8 @@ target "nvidia" {
     os = [
       {
         name = "ubuntu22"
-        base_image = "mirror.gcr.io/ubuntu:22.04"
-        runtime_image = "mirror.gcr.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+        base_image = "ubuntu:22.04"
+        runtime_image = "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
         tag = "ubuntu22.04"
       }
     ]
