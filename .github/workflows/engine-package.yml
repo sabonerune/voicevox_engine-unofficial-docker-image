@@ -6,6 +6,9 @@ on:
       ENGINE_VERSION:
         description: "Target Engine version."
         type: string
+  push:
+    branches: main
+  pull_request:
 
 jobs:
   build:
