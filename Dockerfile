@@ -217,8 +217,41 @@ RUN cp -P /usr/local/cuda/lib64/libcudart.so.* .
 RUN cp -P /usr/local/cuda/lib64/libcufft.so.* .
 
 
-FROM cpu-package AS nvidia-package
+FROM cpu-package AS cuda-package
 COPY --from=gather-cuda-lib /work /
+
+
+FROM ${RUNTIME_ACCELERATION}-package AS package
+
+
+FROM busybox:stable-glibc AS busybox-env
+
+COPY --from=package --link / /opt/voicevox_engine
+COPY --from=checkout-resource --link /engine/README.md /opt/voicevox_engine/README.md
+RUN mkdir -m 1777 /opt/setting
+COPY --chmod=755 entrypoint.sh /
+RUN echo 'exec /opt/voicevox_engine/run "\$@"' >> /entrypoint.sh
+
+# Set default user
+RUN adduser -D -H USER
+USER USER
+
+# Set setting directory
+ENV XDG_DATA_HOME=/opt/setting
+VOLUME ["${XDG_DATA_HOME}"]
+
+EXPOSE 50021
+ENTRYPOINT ["/entrypoint.sh"]
+
+
+FROM busybox-env AS busybox-cpu-env
+
+CMD ["--host=0.0.0.0"]
+
+
+FROM busybox-env AS busybox-nvidia-env
+
+CMD ["--use_gpu", "--host=0.0.0.0"]
 
 
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
@@ -241,6 +274,7 @@ COPY --from=download-vvm --link /vvm /opt/voicevox_vvm
 RUN mkdir -m 1777 /opt/setting
 
 COPY --chmod=755 entrypoint.sh /
+RUN echo 'exec /opt/voicevox_engine/.venv/bin/python3 /opt/voicevox_engine/run.py "\$@"' >> /entrypoint.sh
 
 RUN useradd USER
 
@@ -262,11 +296,11 @@ RUN echo "/opt/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && ldconfig
 
 # Set default user
 USER USER
-CMD ["--use_gpu", "--host", "0.0.0.0"]
+CMD ["--use_gpu", "--host=0.0.0.0"]
 
 
 FROM runtime-env AS runtime-cpu-env
 
 # Set default user
 USER USER
-CMD ["--host", "0.0.0.0"]
+CMD ["--host=0.0.0.0"]

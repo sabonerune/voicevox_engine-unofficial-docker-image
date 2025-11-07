@@ -32,6 +32,13 @@ target "cpu" {
         name = "ubuntu22"
         base_image = "ubuntu:22.04"
         tag = "ubuntu22.04"
+        target = "runtime-cpu-env"
+      },
+      {
+        name = "busybox"
+        base_image = "ubuntu:22.04"
+        tag = "busybox"
+        target = "busybox-cpu-env"
       }
     ]
   }
@@ -39,7 +46,7 @@ target "cpu" {
     BASE_IMAGE = os.base_image
   }
   platforms = ["linux/amd64", "linux/arm64"]
-  target = "runtime-cpu-env"
+  target = os.target
   tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
 
@@ -53,6 +60,14 @@ target "nvidia" {
         base_image = "ubuntu:22.04"
         runtime_image = "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
         tag = "ubuntu22.04"
+        target = "runtime-nvidia-env"
+      },
+      {
+        name = "busybox"
+        base_image = "ubuntu:22.04"
+        runtime_image = "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+        tag = "busybox"
+        target = "busybox-nvidia-env"
       }
     ]
   }
@@ -61,7 +76,7 @@ target "nvidia" {
     BASE_RUNTIME_IMAGE = os.runtime_image
     RUNTIME_ACCELERATION="cuda"
   }
-  target = "runtime-nvidia-env"
+  target = os.target
   tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]
 }
 
@@ -78,7 +93,7 @@ target "cpu-package" {
 
 target "nvidia-package" {
   inherits = ["nvidia-ubuntu22"]
-  target = "nvidia-package"
+  target = "cuda-package"
   output = [
     {
       type = "local"
