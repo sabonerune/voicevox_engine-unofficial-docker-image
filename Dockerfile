@@ -193,7 +193,7 @@ RUN uv run -m PyInstaller --noconfirm run.spec -- \
 
 
 FROM scratch AS cpu-package
-COPY --from=build-engine /opt/voicevox_engine/dist/run /run
+COPY --from=build-engine /opt/voicevox_engine/dist/run /
 
 
 FROM ${BASE_RUNTIME_IMAGE} AS gather-cuda-lib
@@ -218,7 +218,7 @@ RUN cp -P /usr/local/cuda/lib64/libcufft.so.* .
 
 
 FROM cpu-package AS nvidia-package
-COPY --from=gather-cuda-lib /work /run
+COPY --from=gather-cuda-lib /work /
 
 
 FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
