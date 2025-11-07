@@ -17,7 +17,7 @@ on:
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/voicevox_engine-unofficial-docker-image
-  PUSH_REGISTRY: ${{ inputs.PUSH_REGISTRY && true || false }}
+  PUSH_REGISTRY: ${{ inputs.PUSH_REGISTRY || github.ref_name == 'main' && true || false }}
 
 jobs:
   build:
@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-    if: ${{ inputs.PUSH_REGISTRY }}
+    if: ${{ inputs.PUSH_REGISTRY || github.ref_name == 'main' }}
     steps:
       - uses: actions/checkout@v4
       - name: Download digests
