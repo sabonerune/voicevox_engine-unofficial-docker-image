@@ -6,12 +6,18 @@ on:
       ENGINE_VERSION:
         description: "Target Engine version."
         type: string
+      PUSH_REGISTRY:
+        description: "Push to registry"
+        type: boolean
+        default: false
   push:
     branches:
       - main
+  pull_request:
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/voicevox_engine-unofficial-docker-image
+  PUSH_REGISTRY: ${{ inputs.PUSH_REGISTRY && true || false }}
 
 jobs:
   build:
@@ -55,7 +61,7 @@ jobs:
         if: ${{ startsWith(matrix.target-key, 'nvidia') }}
         uses: docker/bake-action@v6
         with:
-          push: true
+          push: ${{ env.PUSH_REGISTRY }}
           targets: ${{ matrix.target }}
           set: |
             *.cache-from=type=gha,scope=${{ matrix.target-key }}
@@ -73,7 +79,7 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=${{ matrix.target-key }}
             *.cache-to=type=gha,scope=${{ matrix.target-key }}
-            *.output=type=image,push-by-digest=true,name-canonical=true,push=true
+            *.output=type=image,push-by-digest=true,name-canonical=true,push=${{ env.PUSH_REGISTRY }}
             *.platform=${{ matrix.platform }}
             *.tags=${{ env.REGISTRY_IMAGE }}
         env:
@@ -101,6 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+    if: ${{ inputs.PUSH_REGISTRY }}
     steps:
       - uses: actions/checkout@v4
       - name: Download digests
