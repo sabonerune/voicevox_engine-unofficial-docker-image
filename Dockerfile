@@ -133,6 +133,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install --no-install-recommends -y \
   build-essential \
+  ca-certificates \
   git
 
 COPY --from=ghcr.io/astral-sh/uv --link /uv /uvx /opt/uv/bin/
