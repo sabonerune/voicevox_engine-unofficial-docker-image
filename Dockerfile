@@ -13,11 +13,6 @@ ARG CUDNN_VERSION=8.9.7.29
 ARG ENGINE_VERSION
 ARG ENGINE_VERSION_FOR_CODE=${ENGINE_VERSION:-latest}
 
-FROM scratch AS checkout-engine
-ARG ENGINE_VERSION=master
-ADD https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} /voicevox_engine
-
-
 FROM scratch AS checkout-resource
 ARG RESOURCE_VERSION
 ADD https://github.com/VOICEVOX/voicevox_resource.git#${RESOURCE_VERSION} .
@@ -29,7 +24,7 @@ WORKDIR /vvm
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y jq wget
+  apt-get install --no-install-recommends -y ca-certificates jq wget
 
 RUN <<EOF
 #!/bin/bash
@@ -68,7 +63,7 @@ WORKDIR /work
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y tar zlib1g
+  apt-get install --no-install-recommends -y tar zlib1g
 
 RUN mkdir -p /opt/voicevox_onnxruntime
 RUN --mount=target=/tmp/voicevox_onnxruntime.tgz,source=/voicevox_onnxruntime.tgz,from=download-runtime \
@@ -95,7 +90,7 @@ WORKDIR /work
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y unzip
+  apt-get install --no-install-recommends -y unzip
 
 RUN --mount=target=/tmp/voicevox_core.zip,source=/voicevox_core.zip,from=download-core \
   unzip /tmp/voicevox_core.zip
@@ -116,7 +111,7 @@ WORKDIR /work
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y tar xz-utils
+  apt-get install --no-install-recommends -y tar xz-utils
 
 RUN mkdir -p /opt/cudnn
 RUN --mount=target=/tmp/cudnn.tar.xz,source=/cudnn.tar.xz,from=download-cudnn \
@@ -136,15 +131,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
   apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y \
+  apt-get install --no-install-recommends -y \
   build-essential \
+  ca-certificates \
   git
 
 COPY --from=ghcr.io/astral-sh/uv --link /uv /uvx /opt/uv/bin/
 ENV PATH=/opt/uv/bin:$PATH
 ENV UV_PYTHON_INSTALL_DIR=/opt/python
 
-COPY --from=checkout-engine --link /voicevox_engine /opt/voicevox_engine
+ARG ENGINE_VERSION=master
+ADD --link https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} /opt/voicevox_engine
 
 RUN uv sync --managed-python
 RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
@@ -201,7 +198,7 @@ WORKDIR /work
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y patchelf
+  apt-get install --no-install-recommends -y patchelf
 
 COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
 RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so .
