@@ -35,7 +35,7 @@ RUN <<EOF
 #!/bin/bash
 set -euxo pipefail
 wget --no-verbose --output-document=- https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} | \
-  jq --raw-output '.assets[]|select(.name|test("^n.*\\.vvm\$")|not).browser_download_url' | \
+  jq --raw-output '.assets[]|select(.name|test("^n.*\\.vvm$")|not).browser_download_url' | \
   wget --no-verbose --input-file=-
 EOF
 RUN mkdir ./vvms
