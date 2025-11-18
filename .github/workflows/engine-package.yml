@@ -15,15 +15,15 @@ jobs:
     strategy:
       matrix:
         include:
-          - target-key: cpu-ubuntu22-x64
+          - target-key: cpu-x64
             target: cpu-package
             platform: linux/amd64
             os: ubuntu-latest
-          - target-key: nvidia-ubuntu22
-            target: nvidia-package
+          - target-key: cuda
+            target: cuda-package
             platform: linux/amd64
             os: ubuntu-latest
-          - target-key: cpu-ubuntu22-arm64
+          - target-key: cpu-arm64
             target: cpu-package
             platform: linux/arm64
             os: ubuntu-24.04-arm
@@ -41,13 +41,13 @@ jobs:
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
-        if: ${{ startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
 
       - name: Artifact name
         id: artifact-name
         run: |
           version=${{ inputs.ENGINE_VERSION }}
-          if [[ ${{ matrix.target-key }} =~ ^nvidia-.* ]]; then
+          if [[ ${{ matrix.target-key }} =~ ^cuda-.* ]]; then
             acceleration=cuda
           else
             acceleration=cpu
@@ -63,6 +63,7 @@ jobs:
         run: |
           set -o pipefail
           docker buildx bake ${{ matrix.target }} \
+            --set=*.cache-from=type=gha,scope=${{ matrix.target-key }} \
             --set=*.output=type=tar,dest=- \
             --set=*.platform=${{ matrix.platform }} | \
           xz --compress > dist/${{ steps.artifact-name.outputs.ARTIFACT_NAME }}.tar.xz
