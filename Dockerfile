@@ -213,6 +213,8 @@ RUN cp -P /usr/local/cuda/lib64/libcublasLt.so.* .
 RUN cp -P /usr/local/cuda/lib64/libcudart.so.* .
 RUN cp -P /usr/local/cuda/lib64/libcufft.so.* .
 
+RUN cp -P /usr/lib/x86_64-linux-gnu/libz.so.* .
+
 
 FROM cpu-package AS nvidia-package
 COPY --from=gather-cuda-lib /work /
