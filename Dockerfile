@@ -158,9 +158,9 @@ RUN OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
 FROM build-env AS prepare-resource
 WORKDIR /opt/voicevox_engine
 
-RUN unlink ./resources/engine_manifest_assets/downloadable_libraries.json
 RUN --mount=target=/tmp/resource/,source=/,from=checkout-resource \
   DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
+RUN unlink ./resources/engine_manifest_assets/downloadable_libraries.json
 
 RUN uv run tools/generate_filemap.py --target_dir resources/character_info
 
@@ -172,6 +172,8 @@ RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION_F
 
 FROM build-env AS build-engine
 WORKDIR /opt/voicevox_engine
+
+RUN rm --recursive ./resources
 
 COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./licenses.json
 
