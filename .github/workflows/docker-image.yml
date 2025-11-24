@@ -138,10 +138,10 @@ jobs:
           TAG_PREFIX: ${{ env.REGISTRY_IMAGE }}
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
-      - name: Create manifest list and push for cpu-ubuntu22
+      - name: Create manifest list and push for cpu
         working-directory: ${{ runner.temp }}/digests
         run: |
-          tags=$(jq -cr '[[.target | to_entries[] | select(.key | startswith("cpu-ubuntu22")).value.tags[]] | unique[] | "-t " + .] | join(" ")' \
+          tags=$(jq -cr '[[.target | to_entries[] | select(.key | startswith("cpu")).value.tags[]] | unique[] | "-t " + .] | join(" ")' \
             ${{ runner.temp }}/print_bake.json)
           images=$(cat cpu-* | printf '${{ env.REGISTRY_IMAGE }}@%s ' `cat`)
           docker buildx imagetools create $tags $images
