@@ -10,11 +10,11 @@ variable "TAG_ENGINE_VERSION" {
 }
 
 group "default" {
-  targets = ["cpu", "nvidia"]
+  targets = ["cpu", "cuda"]
 }
 
 group "package" {
-  targets = ["cpu-package", "nvidia-package"]
+  targets = ["cpu-package", "cuda-package"]
 }
 
 target "_common" {
@@ -24,49 +24,23 @@ target "_common" {
 }
 
 target "cpu" {
-  inherits=["_common"]
-  name = "cpu-${os.name}"
-  matrix = {
-    os = [
-      {
-        name = "ubuntu22"
-        base_image = "ubuntu:22.04"
-        tag = "ubuntu22.04"
-      }
-    ]
-  }
-  args = {
-    BASE_IMAGE = os.base_image
-  }
+  inherits = ["_common"]
   platforms = ["linux/amd64", "linux/arm64"]
   target = "runtime-cpu-env"
-  tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
+  tags = ["${TAG_PREFIX}:cpu-${TAG_ENGINE_VERSION}"]
 }
 
-target "nvidia" {
-  inherits=["_common"]
-  name = "nvidia-${os.name}"
-  matrix = {
-    os = [
-      {
-        name = "ubuntu22"
-        base_image = "ubuntu:22.04"
-        runtime_image = "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
-        tag = "ubuntu22.04"
-      }
-    ]
-  }
+target "cuda" {
+  inherits = ["_common"]
   args = {
-    BASE_IMAGE = os.base_image
-    BASE_RUNTIME_IMAGE = os.runtime_image
     RUNTIME_ACCELERATION="cuda"
   }
-  target = "runtime-nvidia-env"
-  tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]
+  target = "runtime-cuda-env"
+  tags = ["${TAG_PREFIX}:cuda-${TAG_ENGINE_VERSION}"]
 }
 
 target "cpu-package" {
-  inherits = ["cpu-ubuntu22"]
+  inherits = ["cpu"]
   target = "cpu-package"
   output = [
     {
@@ -76,9 +50,9 @@ target "cpu-package" {
   ]
 }
 
-target "nvidia-package" {
-  inherits = ["nvidia-ubuntu22"]
-  target = "nvidia-package"
+target "cuda-package" {
+  inherits = ["cuda"]
+  target = "cuda-package"
   output = [
     {
       type = "local"

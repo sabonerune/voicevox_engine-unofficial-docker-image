@@ -27,16 +27,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - target-key: cpu-ubuntu22-x64
-            target: cpu-ubuntu22
+          - target-key: cpu-x64
+            target: cpu
             platform: linux/amd64
             os: ubuntu-latest
-          - target-key: cpu-ubuntu22-arm64
-            target: cpu-ubuntu22
+          - target-key: cpu-arm64
+            target: cpu
             platform: linux/arm64
             os: ubuntu-24.04-arm
-          - target-key: nvidia-ubuntu22
-            target: nvidia-ubuntu22
+          - target-key: cuda-x64
+            target: cuda
             platform: linux/amd64
             os: ubuntu-latest
 
@@ -57,8 +57,12 @@ jobs:
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
 
-      - name: Build for nvidia
-        if: ${{ startsWith(matrix.target-key, 'nvidia') }}
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
+
+      - name: Build for cuda
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
         uses: docker/bake-action@v6
         with:
           push: ${{ env.PUSH_REGISTRY }}
@@ -71,7 +75,7 @@ jobs:
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Build
-        if: ${{ !startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         id: bake
         uses: docker/bake-action@v6
         with:
@@ -86,14 +90,14 @@ jobs:
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Export digest
-        if: ${{ !startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         run: |
           mkdir -p ${{ runner.temp }}/digests
           digest="${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['containerimage.digest'] }}"
           echo $digest > ${{ runner.temp }}/digests/${{ matrix.target-key }}
 
       - name: Upload digest
-        if: ${{ !startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.target-key }}
@@ -139,5 +143,5 @@ jobs:
         run: |
           tags=$(jq -cr '[[.target | to_entries[] | select(.key | startswith("cpu-ubuntu22")).value.tags[]] | unique[] | "-t " + .] | join(" ")' \
             ${{ runner.temp }}/print_bake.json)
-          images=$(cat cpu-ubuntu22-* | printf '${{ env.REGISTRY_IMAGE }}@%s ' `cat`)
+          images=$(cat cpu-* | printf '${{ env.REGISTRY_IMAGE }}@%s ' `cat`)
           docker buildx imagetools create $tags $images
