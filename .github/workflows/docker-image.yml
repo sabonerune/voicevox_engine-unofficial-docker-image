@@ -57,6 +57,10 @@ jobs:
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
+
       - name: Build for cuda
         if: ${{ startsWith(matrix.target-key, 'cuda') }}
         uses: docker/bake-action@v6
