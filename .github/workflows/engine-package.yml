@@ -19,7 +19,7 @@ jobs:
             target: cpu-package
             platform: linux/amd64
             os: ubuntu-latest
-          - target-key: cuda
+          - target-key: cuda-x64
             target: cuda-package
             platform: linux/amd64
             os: ubuntu-latest

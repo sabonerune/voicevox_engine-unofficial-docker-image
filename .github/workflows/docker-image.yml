@@ -35,7 +35,7 @@ jobs:
             target: cpu
             platform: linux/arm64
             os: ubuntu-24.04-arm
-          - target-key: cuda
+          - target-key: cuda-x64
             target: cuda
             platform: linux/amd64
             os: ubuntu-latest
@@ -56,10 +56,6 @@ jobs:
           buildkitd-config-inline: |
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
-
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        if: ${{ startsWith(matrix.target-key, 'cuda') }}
 
       - name: Build for cuda
         if: ${{ startsWith(matrix.target-key, 'cuda') }}
