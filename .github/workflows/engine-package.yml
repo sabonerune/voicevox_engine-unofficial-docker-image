@@ -59,6 +59,9 @@ jobs:
           fi
           echo "ARTIFACT_NAME=voicevox_engine-linux-${acceleration}-${arch}-${version:-dev}" >> "$GITHUB_OUTPUT"
 
+      - name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Build
         run: |
           set -o pipefail
