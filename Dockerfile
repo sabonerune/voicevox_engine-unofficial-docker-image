@@ -274,7 +274,6 @@ FROM ${RUNTIME_IMAGE} AS runtime-env
 
 COPY --from=busybox:stable-uclibc --link /bin/busybox /busybox/busybox
 RUN ["/busybox/busybox", "mkdir", "-m", "1777", "-p", "/opt/setting"]
-RUN ["/busybox/busybox", "adduser", "-D", "-H", "user"]
 
 COPY --chmod=755 --link <<EOF /opt/entrypoint.sh
 #!/busybox/busybox sh
@@ -291,7 +290,7 @@ COPY --from=package --link / /opt/voicevox_engine
 ENV XDG_DATA_HOME=/opt/setting
 ENV VV_HOST=0.0.0.0
 EXPOSE 50021
-USER user
+USER 65532
 VOLUME ["${XDG_DATA_HOME}"]
 ENTRYPOINT ["/opt/entrypoint.sh"]
 
