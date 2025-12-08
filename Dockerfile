@@ -228,6 +228,7 @@ RUN cp ./licenses.json ./resources/engine_manifest_assets/dependency_licenses.js
 RUN --mount=type=cache,id=uv-cache-${BUILD_IMAGE},target=/tmp/uv-cache \
   uv sync --group build
 RUN --mount=target=/tmp/vvms,source=/vvm/vvms,from=download-vvm \
+  --mount=type=tmpfs,target=/opt/voicevox_engine/build \
   uv run -m PyInstaller --noconfirm run.spec -- --core_model_dir_path=/tmp/vvms
 
 # WORKAROUND
