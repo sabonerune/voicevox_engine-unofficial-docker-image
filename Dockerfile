@@ -9,9 +9,9 @@ ARG RUNTIME_ACCELERATION=cpu
 ARG RESOURCE_VERSION=0.25.0
 ARG VVM_VERSION=0.16.1
 
-ARG CUDART_VERSION=12.4.127
-ARG CUBLAS_VERSION=12.4.5.8
-ARG CUFFT_VERSION=11.2.1.3
+ARG CUDART_VERSION=12.2.128
+ARG CUBLAS_VERSION=12.2.4.5
+ARG CUFFT_VERSION=11.0.8.91
 ARG CUDNN_VERSION=8.9.7.29
 
 ARG ENGINE_VERSION
@@ -45,17 +45,23 @@ RUN mv ./*.vvm ./vvms/
 
 FROM scratch AS download-runtime-cpu-amd64
 ARG RUNTIME_VERSION
-ADD --unpack=true https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-${RUNTIME_VERSION}.tgz .
+ADD --unpack=true \
+  --checksum=sha256:72b5287fdd48dc833a9929f6e9e3826e793b54ce1202181be93f63823a222f58 \
+  https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-${RUNTIME_VERSION}.tgz .
 
 
 FROM scratch AS download-runtime-cpu-arm64
 ARG RUNTIME_VERSION
-ADD --unpack=true https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-arm64-${RUNTIME_VERSION}.tgz .
+ADD --unpack=true \
+  --checksum=sha256:276eedc007b694324f59bc35c2cf9041724eb786608437a649f096edea3943a9 \
+  https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-arm64-${RUNTIME_VERSION}.tgz .
 
 
 FROM scratch AS download-runtime-cuda-amd64
 ARG RUNTIME_VERSION
-ADD --unpack=true https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-cuda-${RUNTIME_VERSION}.tgz .
+ADD --unpack=true \
+  --checksum=sha256:c836e110d4eb68c9b45f7e05e2ef86931e6edaee71e27bbe1cf2c6da52b17ee2 \
+  https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-cuda-${RUNTIME_VERSION}.tgz .
 
 
 FROM download-runtime-${RUNTIME_ACCELERATION}-${TARGETARCH} AS download-runtime
@@ -63,13 +69,15 @@ FROM download-runtime-${RUNTIME_ACCELERATION}-${TARGETARCH} AS download-runtime
 
 FROM scratch AS download-core-amd64
 ARG CORE_VERSION
-ADD https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-x64-${CORE_VERSION}.zip \
+ADD --checksum=sha256:2eba5c17f6dda1628f9673e3fbed69fe5dc5c49dc709c9bcad0caa3542dfe249 \
+  https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-x64-${CORE_VERSION}.zip \
   voicevox_core.zip
 
 
 FROM scratch AS download-core-arm64
 ARG CORE_VERSION
-ADD https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-arm64-${CORE_VERSION}.zip \
+ADD --checksum=sha256:03697bc2734017bdf0d6fbc8bae75d24601d567eb015f114d953539798a30e95 \
+  https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-arm64-${CORE_VERSION}.zip \
   voicevox_core.zip
 
 
@@ -97,10 +105,18 @@ ARG CUDART_VERSION
 ARG CUBLAS_VERSION
 ARG CUFFT_VERSION
 ARG CUDNN_VERSION
-ADD --link --unpack=true https://${BASE_URL}/cuda/redist/cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-${CUDART_VERSION}-archive.tar.xz /cudart
-ADD --link --unpack=true https://${BASE_URL}/cuda/redist/libcublas/linux-x86_64/libcublas-linux-x86_64-${CUBLAS_VERSION}-archive.tar.xz /cublas
-ADD --link --unpack=true https://${BASE_URL}/cuda/redist/libcufft/linux-x86_64/libcufft-linux-x86_64-${CUFFT_VERSION}-archive.tar.xz /cufft
-ADD --link --unpack=true https://${BASE_URL}/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz /cudnn
+ADD --link --unpack=true \
+  --checksum=sha256:915a52fd0798d63ab49eda08232c02a394488b37e2c46633b755c9a49131ca71 \
+  https://${BASE_URL}/cuda/redist/cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-${CUDART_VERSION}-archive.tar.xz /cudart
+ADD --link --unpack=true \
+  --checksum=sha256:739719b7b9a464b37f0587ccd5c4f39a83d53f642cdcaad48a7dd59e5e4c0930 \
+  https://${BASE_URL}/cuda/redist/libcublas/linux-x86_64/libcublas-linux-x86_64-${CUBLAS_VERSION}-archive.tar.xz /cublas
+ADD --link --unpack=true \
+  --checksum=sha256:2ba28ab14eb42002cfa188be8191d4ba77b4ccefebc1c316e836845cd87e6a56 \
+  https://${BASE_URL}/cuda/redist/libcufft/linux-x86_64/libcufft-linux-x86_64-${CUFFT_VERSION}-archive.tar.xz /cufft
+ADD --link --unpack=true \
+  --checksum=sha256:475333625c7e42a7af3ca0b2f7506a106e30c93b1aa0081cd9c13efb6e21e3bb \
+  https://${BASE_URL}/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz /cudnn
 
 
 FROM download-cuda-lib-${TARGETARCH} AS download-cuda-lib
