@@ -289,8 +289,8 @@ FROM ${RUNTIME_ACCELERATION}-package AS package
 
 FROM ${RUNTIME_IMAGE} AS runtime-env
 
+ADD --link rootfs.tar /
 COPY --from=busybox:stable-uclibc --link /bin/busybox /busybox/busybox
-RUN ["/busybox/busybox", "mkdir", "-m", "1777", "-p", "/opt/setting"]
 
 COPY --chmod=755 --link <<EOF /opt/entrypoint.sh
 #!/busybox/busybox sh
