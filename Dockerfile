@@ -287,20 +287,32 @@ COPY --from=gather-cuda-lib --link /work /
 FROM ${RUNTIME_ACCELERATION}-package AS package
 
 
+FROM ${BUILD_IMAGE} AS build-entrypoint
+WORKDIR /work
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get install --no-install-recommends -y \
+  gcc \
+  libc6-dev \
+  make
+
+COPY --link entrypoint .
+
+RUN <<EOF
+export SOURCE_DATE_EPOCH=0
+make
+touch -c -d "@$SOURCE_DATE_EPOCH" entrypoint
+EOF
+
 FROM ${RUNTIME_IMAGE} AS runtime-env
 
 ADD --link rootfs.tar /
-COPY --from=busybox:stable-uclibc --link /bin/busybox /busybox/busybox
+COPY --from=build-entrypoint --link /work/entrypoint /opt/entrypoint
 
-COPY --chmod=755 --link <<EOF /opt/entrypoint.sh
-#!/busybox/busybox sh
-/busybox/busybox set -eu
-
-# Display README for engine
-/busybox/busybox cat /opt/README.md >&2
-
-exec /opt/voicevox_engine/run "\$@"
-EOF
 COPY --from=checkout-resource --link /engine/README.md /opt/README.md
 COPY --from=package --link / /opt/voicevox_engine
 
@@ -309,7 +321,7 @@ ENV VV_HOST=0.0.0.0
 EXPOSE 50021
 USER 65532
 VOLUME ["${XDG_DATA_HOME}"]
-ENTRYPOINT ["/opt/entrypoint.sh"]
+ENTRYPOINT ["/opt/entrypoint", "/opt/README.md", "/opt/voicevox_engine/run"]
 
 
 FROM runtime-env AS runtime-cuda-env
