@@ -62,6 +62,7 @@ jobs:
         if: ${{ startsWith(matrix.target-key, 'cuda') }}
 
       - name: Build for cuda
+        id: bake-cuda
         if: ${{ startsWith(matrix.target-key, 'cuda') }}
         uses: docker/bake-action@v6
         with:
@@ -73,6 +74,11 @@ jobs:
         env:
           TAG_PREFIX: ${{ env.REGISTRY_IMAGE }}
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
+
+      - name: Print Inspect
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
+        run: |
+          docker image inspect "${{ fromJSON(steps.bake-cuda.outputs.metadata)[matrix.target]['image.name'] }}"
 
       - name: Build
         if: ${{ !startsWith(matrix.target-key, 'cuda') }}
@@ -88,6 +94,11 @@ jobs:
             *.tags=${{ env.REGISTRY_IMAGE }}
         env:
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
+
+      - name: Print Inspect
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
+        run: |
+          docker image inspect "${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['image.name'] }}"
 
       - name: Export digest
         if: ${{ !startsWith(matrix.target-key, 'cuda') }}
