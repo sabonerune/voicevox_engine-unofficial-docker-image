@@ -98,7 +98,7 @@ jobs:
       - name: Print Inspect
         if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         run: |
-          docker image inspect "${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['image.name'] }}"
+          docker image inspect "${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['containerimage.digest'] }}"
 
       - name: Export digest
         if: ${{ !startsWith(matrix.target-key, 'cuda') }}
