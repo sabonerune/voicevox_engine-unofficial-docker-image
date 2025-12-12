@@ -22,7 +22,6 @@ ADD https://github.com/VOICEVOX/voicevox_resource.git#${RESOURCE_VERSION} .
 
 
 FROM --platform=$BUILDPLATFORM ${BUILD_IMAGE} AS download-vvm
-ARG VVM_VERSION
 WORKDIR /vvm
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
@@ -32,12 +31,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   DEBIAN_FRONTEND=noninteractive \
   apt-get install --no-install-recommends -y ca-certificates jq wget
 
+ARG VVM_VERSION
 RUN <<EOF
 #!/bin/bash
 set -euxo pipefail
-wget --no-verbose --output-document=- https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} | \
+wget --no-verbose --tries=3 --output-document=- https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} | \
   jq --raw-output '.assets[]|select(.name|test("^n.*\\.vvm$")|not).browser_download_url' | \
-  wget --no-verbose --input-file=-
+  wget --no-verbose --tries=3 --input-file=-
 EOF
 RUN mkdir ./vvms
 RUN mv ./*.vvm ./vvms/
@@ -100,20 +100,24 @@ RUN --mount=target=/tmp/voicevox_core.zip,source=/voicevox_core.zip,from=downloa
 
 
 FROM scratch AS download-cuda-lib-amd64
+
 ARG BASE_URL=developer.download.nvidia.com/compute
 ARG CUDART_VERSION
-ARG CUBLAS_VERSION
-ARG CUFFT_VERSION
-ARG CUDNN_VERSION
 ADD --link --unpack=true \
   --checksum=sha256:915a52fd0798d63ab49eda08232c02a394488b37e2c46633b755c9a49131ca71 \
   https://${BASE_URL}/cuda/redist/cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-${CUDART_VERSION}-archive.tar.xz /cudart
+
+ARG CUBLAS_VERSION
 ADD --link --unpack=true \
   --checksum=sha256:739719b7b9a464b37f0587ccd5c4f39a83d53f642cdcaad48a7dd59e5e4c0930 \
   https://${BASE_URL}/cuda/redist/libcublas/linux-x86_64/libcublas-linux-x86_64-${CUBLAS_VERSION}-archive.tar.xz /cublas
+
+ARG CUFFT_VERSION
 ADD --link --unpack=true \
   --checksum=sha256:2ba28ab14eb42002cfa188be8191d4ba77b4ccefebc1c316e836845cd87e6a56 \
   https://${BASE_URL}/cuda/redist/libcufft/linux-x86_64/libcufft-linux-x86_64-${CUFFT_VERSION}-archive.tar.xz /cufft
+
+ARG CUDNN_VERSION
 ADD --link --unpack=true \
   --checksum=sha256:475333625c7e42a7af3ca0b2f7506a106e30c93b1aa0081cd9c13efb6e21e3bb \
   https://${BASE_URL}/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz /cudnn
@@ -161,9 +165,9 @@ RUN --mount=target=/tmp/uv.lock,source=/uv.lock,from=checkout-engine <<EOF
 # Download Python
 set -eux
 PYTHON_VERSION=$(sed -En 's/requires-python.*"==(.*)".*/\1/p' /tmp/uv.lock)
-wget --no-verbose --output-document=- \
+wget --no-verbose --tries=3 --output-document=- \
   https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz | \
-  tar -xJf - --strip-components 1
+  tar -x -J -f - --strip-components 1
 EOF
 
 RUN <<EOF
@@ -179,9 +183,9 @@ set -eux
   --enable-shared \
   --without-static-libpython \
   --without-readline \
-  LDFLAGS='-Wl,-rpath,\$$ORIGIN/../lib,-s'
-make -j "$(nproc)"
-make install
+  LDFLAGS='-Wl,--strip-all,-rpath,\$$ORIGIN/../lib'
+make -j "$(nproc)" --silent
+make install --silent
 EOF
 
 
@@ -206,10 +210,11 @@ ENV UV_CACHE_DIR=/tmp/uv-cache/
 ENV UV_LINK_MODE=copy
 
 ARG BUILD_IMAGE
-RUN --mount=type=cache,id=uv-cache-${BUILD_IMAGE},target=/tmp/uv-cache \
+ARG UV_CACHE_ID=uv-cache-${BUILD_IMAGE}
+RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
   --mount=target=pyproject.toml,source=/pyproject.toml,from=checkout-engine \
   --mount=target=uv.lock,source=/uv.lock,from=checkout-engine \
-  uv sync --locked --python=/opt/python/bin/python3
+  uv sync --locked --no-progress --python=/opt/python/bin/python3
 RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
 
 # Copy Engine files
@@ -217,7 +222,7 @@ COPY --from=checkout-engine --link / /opt/voicevox_engine
 
 
 FROM build-env AS generate-licenses
-RUN --mount=type=cache,id=uv-cache-${BUILD_IMAGE},target=/tmp/uv-cache \
+RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
   OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
   bash tools/create_venv_and_generate_licenses.bash
 
@@ -241,8 +246,8 @@ COPY --from=generate-licenses --link /opt/voicevox_engine/licenses.json ./licens
 RUN cp ./licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
 
 # Run PyInstaller
-RUN --mount=type=cache,id=uv-cache-${BUILD_IMAGE},target=/tmp/uv-cache \
-  uv sync --group build
+RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
+  uv sync --group build --no-progress
 RUN --mount=target=/tmp/vvms,source=/vvm/vvms,from=download-vvm \
   --mount=type=tmpfs,target=/opt/voicevox_engine/build \
   uv run -m PyInstaller --noconfirm run.spec -- --core_model_dir_path=/tmp/vvms
@@ -302,11 +307,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY --link entrypoint .
 
-RUN <<EOF
-export SOURCE_DATE_EPOCH=0
-make
-touch -c -d "@$SOURCE_DATE_EPOCH" entrypoint
-EOF
+RUN SOURCE_DATE_EPOCH=0 make --silent
+
 
 FROM ${RUNTIME_IMAGE} AS runtime-env
 
