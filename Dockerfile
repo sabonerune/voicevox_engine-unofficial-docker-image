@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG BUILD_IMAGE=ubuntu:22.04
-ARG RUNTIME_IMAGE=gcr.io/distroless/base-nossl-debian12
+ARG RUNTIME_IMAGE=gcr.io/distroless/base-nossl-debian13
 
 ARG CORE_VERSION=0.16.2
 ARG RUNTIME_VERSION=1.17.3
