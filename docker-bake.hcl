@@ -10,11 +10,7 @@ variable "TAG_ENGINE_VERSION" {
 }
 
 group "default" {
-  targets = ["cpu", "nvidia"]
-}
-
-group "package" {
-  targets = ["cpu-package", "nvidia-package"]
+  targets = ["cpu", "cuda"]
 }
 
 target "_common" {
@@ -24,65 +20,32 @@ target "_common" {
 }
 
 target "cpu" {
-  inherits=["_common"]
-  name = "cpu-${os.name}"
-  matrix = {
-    os = [
-      {
-        name = "ubuntu22"
-        base_image = "mirror.gcr.io/ubuntu:22.04"
-        tag = "ubuntu22.04"
-      }
-    ]
-  }
-  args = {
-    BASE_IMAGE = os.base_image
-  }
+  inherits = ["_common"]
   platforms = ["linux/amd64", "linux/arm64"]
-  target = "runtime-env"
-  tags = ["${TAG_PREFIX}:cpu-${os.tag}-${TAG_ENGINE_VERSION}"]
+  target = "runtime-cpu-env"
+  tags = ["${TAG_PREFIX}:cpu-${TAG_ENGINE_VERSION}"]
 }
 
-target "nvidia" {
-  inherits=["_common"]
-  name = "nvidia-${os.name}"
-  matrix = {
-    os = [
-      {
-        name = "ubuntu22"
-        base_image = "mirror.gcr.io/ubuntu:22.04"
-        runtime_image = "mirror.gcr.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04"
-        tag = "ubuntu22.04"
-      }
-    ]
-  }
+target "cuda" {
+  inherits = ["_common"]
   args = {
-    BASE_IMAGE = os.base_image
-    BASE_RUNTIME_IMAGE = os.runtime_image
     RUNTIME_ACCELERATION="cuda"
   }
-  target = "runtime-nvidia-env"
-  tags = ["${TAG_PREFIX}:nvidia-${os.tag}-${TAG_ENGINE_VERSION}"]
+  target = "runtime-cuda-env"
+  tags = ["${TAG_PREFIX}:cuda-${TAG_ENGINE_VERSION}"]
 }
 
-target "cpu-package" {
-  inherits = ["cpu-ubuntu22"]
-  target = "cpu-package"
+target "package" {
+  name = "${acceleration}-package"
+  matrix = {
+    "acceleration" = ["cpu", "cuda"]
+  }
+  inherits = ["${acceleration}"]
+  target = "package"
   output = [
     {
       type = "local"
-      dest = "dist/voicevox_engine-linux-cpu-${TAG_ENGINE_VERSION}"
-    }
-  ]
-}
-
-target "nvidia-package" {
-  inherits = ["nvidia-ubuntu22"]
-  target = "nvidia-package"
-  output = [
-    {
-      type = "local"
-      dest = "dist/voicevox_engine-linux-cuda-${TAG_ENGINE_VERSION}"
+      dest = "dist/voicevox_engine-linux-${acceleration}-${TAG_ENGINE_VERSION}"
     }
   ]
 }

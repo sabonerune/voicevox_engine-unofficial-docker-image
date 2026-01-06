@@ -1,6 +1,7 @@
 .git
 .github
 dist
+tools
 .dockerignore
 docker-bake.hcl
 Dockerfile

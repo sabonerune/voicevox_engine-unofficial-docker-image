@@ -6,12 +6,18 @@ on:
       ENGINE_VERSION:
         description: "Target Engine version."
         type: string
+      PUSH_REGISTRY:
+        description: "Push to registry"
+        type: boolean
+        default: false
   push:
     branches:
       - main
+  pull_request:
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/voicevox_engine-unofficial-docker-image
+  PUSH_REGISTRY: ${{ inputs.PUSH_REGISTRY || github.ref_name == 'main' && true || false }}
 
 jobs:
   build:
@@ -21,16 +27,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - target-key: cpu-ubuntu22-x64
-            target: cpu-ubuntu22
+          - target-key: cpu-x64
+            target: cpu
             platform: linux/amd64
             os: ubuntu-latest
-          - target-key: cpu-ubuntu22-arm64
-            target: cpu-ubuntu22
+          - target-key: cpu-arm64
+            target: cpu
             platform: linux/arm64
             os: ubuntu-24.04-arm
-          - target-key: nvidia-ubuntu22
-            target: nvidia-ubuntu22
+          - target-key: cuda-x64
+            target: cuda
             platform: linux/amd64
             os: ubuntu-latest
 
@@ -46,12 +52,20 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
 
-      - name: Build for nvidia
-        if: ${{ startsWith(matrix.target-key, 'nvidia') }}
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
+
+      - name: Build for cuda
+        if: ${{ startsWith(matrix.target-key, 'cuda') }}
         uses: docker/bake-action@v6
         with:
-          push: true
+          push: ${{ env.PUSH_REGISTRY }}
           targets: ${{ matrix.target }}
           set: |
             *.cache-from=type=gha,scope=${{ matrix.target-key }}
@@ -61,7 +75,7 @@ jobs:
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Build
-        if: ${{ !startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         id: bake
         uses: docker/bake-action@v6
         with:
@@ -69,21 +83,21 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=${{ matrix.target-key }}
             *.cache-to=type=gha,scope=${{ matrix.target-key }}
-            *.output=type=image,push-by-digest=true,name-canonical=true,push=true
+            *.output=type=image,push-by-digest=true,name-canonical=true,push=${{ env.PUSH_REGISTRY }}
             *.platform=${{ matrix.platform }}
             *.tags=${{ env.REGISTRY_IMAGE }}
         env:
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
       - name: Export digest
-        if: ${{ !startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         run: |
           mkdir -p ${{ runner.temp }}/digests
           digest="${{ fromJSON(steps.bake.outputs.metadata)[matrix.target]['containerimage.digest'] }}"
           echo $digest > ${{ runner.temp }}/digests/${{ matrix.target-key }}
 
       - name: Upload digest
-        if: ${{ !startsWith(matrix.target-key, 'nvidia') }}
+        if: ${{ !startsWith(matrix.target-key, 'cuda') }}
         uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.target-key }}
@@ -97,6 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+    if: ${{ inputs.PUSH_REGISTRY || github.ref_name == 'main' }}
     steps:
       - uses: actions/checkout@v4
       - name: Download digests
@@ -123,10 +138,10 @@ jobs:
           TAG_PREFIX: ${{ env.REGISTRY_IMAGE }}
           ENGINE_VERSION: ${{ inputs.ENGINE_VERSION }}
 
-      - name: Create manifest list and push for cpu-ubuntu22
+      - name: Create manifest list and push for cpu
         working-directory: ${{ runner.temp }}/digests
         run: |
-          tags=$(jq -cr '[[.target | to_entries[] | select(.key | startswith("cpu-ubuntu22")).value.tags[]] | unique[] | "-t " + .] | join(" ")' \
+          tags=$(jq -cr '[[.target | to_entries[] | select(.key | startswith("cpu")).value.tags[]] | unique[] | "-t " + .] | join(" ")' \
             ${{ runner.temp }}/print_bake.json)
-          images=$(cat cpu-ubuntu22-* | printf '${{ env.REGISTRY_IMAGE }}@%s ' `cat`)
+          images=$(cat cpu-* | printf '${{ env.REGISTRY_IMAGE }}@%s ' `cat`)
           docker buildx imagetools create $tags $images

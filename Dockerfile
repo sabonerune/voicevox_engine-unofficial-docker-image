@@ -1,42 +1,43 @@
 # syntax=docker/dockerfile:1
 
-ARG BASE_IMAGE=mirror.gcr.io/ubuntu:22.04
-ARG BASE_RUNTIME_IMAGE=$BASE_IMAGE
+ARG BUILD_IMAGE=ubuntu:22.04
+ARG RUNTIME_IMAGE=gcr.io/distroless/base-nossl-debian13
 
 ARG CORE_VERSION=0.16.2
 ARG RUNTIME_VERSION=1.17.3
 ARG RUNTIME_ACCELERATION=cpu
-ARG RESOURCE_VERSION=0.25.0
-ARG VVM_VERSION=0.16.1
+ARG RESOURCE_VERSION=0.25.1
+ARG VVM_VERSION=0.16.3
+
+ARG CUDART_VERSION=12.2.128
+ARG CUBLAS_VERSION=12.2.4.5
+ARG CUFFT_VERSION=11.0.8.91
 ARG CUDNN_VERSION=8.9.7.29
 
 ARG ENGINE_VERSION
-ARG ENGINE_VERSION_FOR_CODE=${ENGINE_VERSION:-latest}
-
-FROM scratch AS checkout-engine
-ARG ENGINE_VERSION=master
-ADD https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} /voicevox_engine
-
 
 FROM scratch AS checkout-resource
 ARG RESOURCE_VERSION
 ADD https://github.com/VOICEVOX/voicevox_resource.git#${RESOURCE_VERSION} .
 
 
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS download-vvm
-ARG VVM_VERSION
+FROM --platform=$BUILDPLATFORM ${BUILD_IMAGE} AS download-vvm
 WORKDIR /vvm
 
-RUN apt-get update && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y jq wget
+  apt-get install --no-install-recommends -y ca-certificates jq wget
 
+ARG VVM_VERSION
 RUN <<EOF
 #!/bin/bash
 set -euxo pipefail
-wget --no-verbose --output-document=- https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} | \
-  jq --raw-output '.assets[].browser_download_url' | \
-  wget --no-verbose --input-file=-
+wget --no-verbose --tries=3 --output-document=- https://api.github.com/repos/VOICEVOX/voicevox_vvm/releases/tags/${VVM_VERSION} | \
+  jq --raw-output '.assets[]|select(.name|test("^n.*\\.vvm$")|not).browser_download_url' | \
+  wget --no-verbose --tries=3 --input-file=-
 EOF
 RUN mkdir ./vvms
 RUN mv ./*.vvm ./vvms/
@@ -44,91 +45,151 @@ RUN mv ./*.vvm ./vvms/
 
 FROM scratch AS download-runtime-cpu-amd64
 ARG RUNTIME_VERSION
-ADD https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-${RUNTIME_VERSION}.tgz \
-  voicevox_onnxruntime.tgz
+ADD --unpack=true \
+  --checksum=sha256:72b5287fdd48dc833a9929f6e9e3826e793b54ce1202181be93f63823a222f58 \
+  https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-${RUNTIME_VERSION}.tgz .
 
 
 FROM scratch AS download-runtime-cpu-arm64
 ARG RUNTIME_VERSION
-ADD https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-arm64-${RUNTIME_VERSION}.tgz \
-  voicevox_onnxruntime.tgz
+ADD --unpack=true \
+  --checksum=sha256:276eedc007b694324f59bc35c2cf9041724eb786608437a649f096edea3943a9 \
+  https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-arm64-${RUNTIME_VERSION}.tgz .
 
 
 FROM scratch AS download-runtime-cuda-amd64
 ARG RUNTIME_VERSION
-ADD https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-cuda-${RUNTIME_VERSION}.tgz \
-  voicevox_onnxruntime.tgz
+ADD --unpack=true \
+  --checksum=sha256:c836e110d4eb68c9b45f7e05e2ef86931e6edaee71e27bbe1cf2c6da52b17ee2 \
+  https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-${RUNTIME_VERSION}/voicevox_onnxruntime-linux-x64-cuda-${RUNTIME_VERSION}.tgz .
 
 
 FROM download-runtime-${RUNTIME_ACCELERATION}-${TARGETARCH} AS download-runtime
 
 
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-onnxruntime
-WORKDIR /work
-
-RUN apt-get update && \
-  DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y tar zlib1g
-
-RUN mkdir -p /opt/voicevox_onnxruntime
-RUN --mount=target=/tmp/voicevox_onnxruntime.tgz,source=/voicevox_onnxruntime.tgz,from=download-runtime \
-  tar -xf /tmp/voicevox_onnxruntime.tgz -C /opt/voicevox_onnxruntime --strip-components 1
-
-
 FROM scratch AS download-core-amd64
 ARG CORE_VERSION
-ADD https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-x64-${CORE_VERSION}.zip \
+ADD --checksum=sha256:2eba5c17f6dda1628f9673e3fbed69fe5dc5c49dc709c9bcad0caa3542dfe249 \
+  https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-x64-${CORE_VERSION}.zip \
   voicevox_core.zip
 
 
 FROM scratch AS download-core-arm64
 ARG CORE_VERSION
-ADD https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-arm64-${CORE_VERSION}.zip \
+ADD --checksum=sha256:03697bc2734017bdf0d6fbc8bae75d24601d567eb015f114d953539798a30e95 \
+  https://github.com/VOICEVOX/voicevox_core/releases/download/${CORE_VERSION}/voicevox_core-linux-arm64-${CORE_VERSION}.zip \
   voicevox_core.zip
 
 
 FROM download-core-${TARGETARCH} AS download-core
 
 
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-core
+FROM --platform=$BUILDPLATFORM ${BUILD_IMAGE} AS extract-core
 WORKDIR /work
 
-RUN apt-get update && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y unzip
+  apt-get install --no-install-recommends -y unzip
 
 RUN --mount=target=/tmp/voicevox_core.zip,source=/voicevox_core.zip,from=download-core \
-  unzip /tmp/voicevox_core.zip
-RUN mv voicevox_core-linux-* /opt/voicevox_core
+  unzip /tmp/voicevox_core.zip && \
+  mv voicevox_core-linux-* /opt/voicevox_core
 
 
-FROM scratch AS download-cudnn-amd64
+FROM scratch AS download-cuda-lib-amd64
+
+ARG BASE_URL=developer.download.nvidia.com/compute
+ARG CUDART_VERSION
+ADD --link --unpack=true \
+  --checksum=sha256:915a52fd0798d63ab49eda08232c02a394488b37e2c46633b755c9a49131ca71 \
+  https://${BASE_URL}/cuda/redist/cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-${CUDART_VERSION}-archive.tar.xz /cudart
+
+ARG CUBLAS_VERSION
+ADD --link --unpack=true \
+  --checksum=sha256:739719b7b9a464b37f0587ccd5c4f39a83d53f642cdcaad48a7dd59e5e4c0930 \
+  https://${BASE_URL}/cuda/redist/libcublas/linux-x86_64/libcublas-linux-x86_64-${CUBLAS_VERSION}-archive.tar.xz /cublas
+
+ARG CUFFT_VERSION
+ADD --link --unpack=true \
+  --checksum=sha256:2ba28ab14eb42002cfa188be8191d4ba77b4ccefebc1c316e836845cd87e6a56 \
+  https://${BASE_URL}/cuda/redist/libcufft/linux-x86_64/libcufft-linux-x86_64-${CUFFT_VERSION}-archive.tar.xz /cufft
+
 ARG CUDNN_VERSION
-ADD https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz \
-  cudnn.tar.xz
+ADD --link --unpack=true \
+  --checksum=sha256:475333625c7e42a7af3ca0b2f7506a106e30c93b1aa0081cd9c13efb6e21e3bb \
+  https://${BASE_URL}/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_cuda12-archive.tar.xz /cudnn
 
 
-FROM download-cudnn-${TARGETARCH} AS download-cudnn
+FROM download-cuda-lib-${TARGETARCH} AS download-cuda-lib
 
 
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS extract-cudnn
+FROM scratch AS checkout-engine
+
+ARG ENGINE_VERSION=master
+ADD --link \
+  --exclude=.github \
+  --exclude=docs \
+  --exclude=test \
+  --exclude=.gitattributes \
+  --exclude=.gitignore \
+  --exclude=.pre-commit-config.yaml \
+  --exclude=CONTRIBUTING.md \
+  --exclude=Dockerfile \
+  --exclude=README.md \
+  https://github.com/VOICEVOX/voicevox_engine.git#${ENGINE_VERSION} .
+
+
+FROM ${BUILD_IMAGE} AS build-python
 WORKDIR /work
 
-RUN apt-get update && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y tar xz-utils
+  apt-get install --no-install-recommends -y \
+  build-essential \
+  ca-certificates \
+  libffi-dev \
+  libssl-dev \
+  pkg-config \
+  tar \
+  uuid-dev \
+  wget \
+  zlib1g-dev
 
-RUN mkdir -p /opt/cudnn
-RUN --mount=target=/tmp/cudnn.tar.xz,source=/cudnn.tar.xz,from=download-cudnn \
-  tar -xf /tmp/cudnn.tar.xz \
-  -C /opt/cudnn \
-  --strip-components 1 \
-  --wildcards "*/libcudnn.so*" \
-  --wildcards "*/libcudnn_*_infer.so*" \
-  --wildcards "*/LICENSE"
+RUN --mount=target=/tmp/uv.lock,source=/uv.lock,from=checkout-engine <<EOF
+# Download Python
+set -eux
+PYTHON_VERSION=$(sed -En 's/requires-python.*"==(.*)".*/\1/p' /tmp/uv.lock)
+wget --no-verbose --tries=3 --output-document=- \
+  https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz | \
+  tar -x -J -f - --strip-components 1
+EOF
+
+RUN <<EOF
+# Build Python
+set -eux
+./configure \
+  --prefix=/opt/python \
+  --disable-test-modules \
+  --with-ensurepip=no \
+  --enable-optimizations \
+  --with-lto \
+  --without-doc-strings \
+  --enable-shared \
+  --without-static-libpython \
+  --without-readline \
+  LDFLAGS='-Wl,--strip-all,-rpath,\$$ORIGIN/../lib'
+make -j "$(nproc)" --silent
+make install --silent
+EOF
 
 
-FROM ${BASE_IMAGE} AS build-env
+FROM ${BUILD_IMAGE} AS build-env
 WORKDIR /opt/voicevox_engine
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
@@ -136,130 +197,140 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
   apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y \
+  apt-get install --no-install-recommends -y \
   build-essential \
-  git
+  ca-certificates \
+  git \
+  patchelf
 
 COPY --from=ghcr.io/astral-sh/uv --link /uv /uvx /opt/uv/bin/
+COPY --from=build-python --link /opt/python /opt/python
 ENV PATH=/opt/uv/bin:$PATH
-ENV UV_PYTHON_INSTALL_DIR=/opt/python
+ENV UV_CACHE_DIR=/tmp/uv-cache/
+ENV UV_LINK_MODE=copy
 
-COPY --from=checkout-engine --link /voicevox_engine /opt/voicevox_engine
-
-RUN uv sync --managed-python
+ARG BUILD_IMAGE
+ARG UV_CACHE_ID=uv-cache-${BUILD_IMAGE}
+RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
+  --mount=target=pyproject.toml,source=/pyproject.toml,from=checkout-engine \
+  --mount=target=uv.lock,source=/uv.lock,from=checkout-engine \
+  uv sync --locked --no-progress --python=/opt/python/bin/python3
 RUN uv run python -c "import pyopenjtalk; pyopenjtalk._lazy_init()"
 
-ARG ENGINE_VERSION_FOR_CODE
-RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${ENGINE_VERSION_FOR_CODE}\"/" voicevox_engine/__init__.py
+# Copy Engine files
+COPY --from=checkout-engine --link / /opt/voicevox_engine
 
 
-FROM build-env AS gen-licenses-env
-RUN OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
+FROM build-env AS generate-licenses
+RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
+  OUTPUT_LICENSE_JSON_PATH=/opt/voicevox_engine/licenses.json \
   bash tools/create_venv_and_generate_licenses.bash
 
 
-FROM build-env AS prepare-resource
-WORKDIR /opt/voicevox_engine
+FROM build-env AS build-engine
 
-RUN --mount=target=/tmp/resource/,source=/,from=checkout-resource \
+# Fix version
+ARG ENGINE_VERSION=latest
+RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION}\"/" engine_manifest.json
+RUN sed -i "s/__version__ = \"latest\"/__version__ = \"${ENGINE_VERSION}\"/" voicevox_engine/__init__.py
+
+# Process resource
+RUN --mount=target=/tmp/resource,source=/,from=checkout-resource \
   DOWNLOAD_RESOURCE_PATH="/tmp/resource" bash tools/process_voicevox_resource.bash
 RUN unlink ./resources/engine_manifest_assets/downloadable_libraries.json
 
+# Generate filemap
 RUN uv run tools/generate_filemap.py --target_dir resources/character_info
 
-COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
+COPY --from=generate-licenses --link /opt/voicevox_engine/licenses.json ./licenses.json
+RUN cp ./licenses.json ./resources/engine_manifest_assets/dependency_licenses.json
 
-ARG ENGINE_VERSION_FOR_CODE
-RUN sed -i "s/\"version\": \"999\\.999\\.999\"/\"version\": \"${ENGINE_VERSION_FOR_CODE}\"/" engine_manifest.json
+# Run PyInstaller
+RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
+  uv sync --group build --no-progress
+RUN --mount=target=/tmp/vvms,source=/vvm/vvms,from=download-vvm \
+  --mount=type=tmpfs,target=/opt/voicevox_engine/build \
+  uv run -m PyInstaller --noconfirm run.spec -- --core_model_dir_path=/tmp/vvms
 
-
-FROM build-env AS build-engine
-WORKDIR /opt/voicevox_engine
-
-RUN rm --recursive ./resources
-
-COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./licenses.json
-
-COPY --from=prepare-resource --link /opt/voicevox_engine/resources ./resources
-COPY --from=prepare-resource --link /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
-
-COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
-COPY --from=extract-core --link /opt/voicevox_core /opt/voicevox_core
-COPY --from=download-vvm --link /vvm/vvms /opt/voicevox_vvm/vvms
-
-RUN uv sync --group build
-RUN uv run -m PyInstaller --noconfirm run.spec -- \
-  --libcore_path=/opt/voicevox_core/lib/libvoicevox_core.so \
-  --libonnxruntime_path=/opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime.so \
-  --core_model_dir_path=/opt/voicevox_vvm/vvms
+# WORKAROUND
+RUN patchelf --add-rpath '$ORIGIN/engine_internal' ./dist/run/run
 
 
 FROM scratch AS cpu-package
-COPY --from=build-engine /opt/voicevox_engine/dist/run /run
+COPY --from=build-engine --link /opt/voicevox_engine/dist/run /
+COPY --from=download-runtime --chown=0 --link /*/lib/libvoicevox_onnxruntime.so /libvoicevox_onnxruntime.so
+COPY --from=extract-core --chown=0 --link /opt/voicevox_core/lib/libvoicevox_core.so /libvoicevox_core.so
 
 
-FROM ${BASE_RUNTIME_IMAGE} AS gather-cuda-lib
+FROM ${BUILD_IMAGE} AS gather-cuda-lib
 WORKDIR /work
 
-RUN apt-get update && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y patchelf
+  apt-get install --no-install-recommends -y patchelf
 
-COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
-RUN cp /opt/voicevox_onnxruntime/lib/libvoicevox_onnxruntime_*.so .
+RUN --mount=target=/tmp,source=/,from=download-cuda-lib <<EOF
+cp -P /tmp/cudart/*/lib/libcudart.so.* .
+cp -P /tmp/cublas/*/lib/libcublas.so.* .
+cp -P /tmp/cublas/*/lib/libcublasLt.so.* .
+cp -P /tmp/cufft/*/lib/libcufft.so.* .
+cp -P /tmp/cudnn/*/lib/libcudnn.so.* .
+cp -P /tmp/cudnn/*/lib/libcudnn_*_infer.so.* .
+EOF
+
+COPY --from=download-runtime --chown=0 --link /*/lib/libvoicevox_onnxruntime_providers_*.so ./
 RUN patchelf --set-rpath '$ORIGIN' /work/libvoicevox_onnxruntime_providers_*.so
 
-COPY --from=extract-cudnn --link /opt/cudnn/lib /opt/cudnn/lib
-RUN cp -P /opt/cudnn/lib/libcudnn.so.* .
-RUN cp -P /opt/cudnn/lib/libcudnn_*_infer.so.* .
 
-RUN cp -P /usr/local/cuda/lib64/libcublas.so.* .
-RUN cp -P /usr/local/cuda/lib64/libcublasLt.so.* .
-RUN cp -P /usr/local/cuda/lib64/libcudart.so.* .
-RUN cp -P /usr/local/cuda/lib64/libcufft.so.* .
+FROM cpu-package AS cuda-package
+COPY --from=gather-cuda-lib --link /work /
 
 
-FROM cpu-package AS nvidia-package
-COPY --from=gather-cuda-lib /work /run
+FROM ${RUNTIME_ACCELERATION}-package AS package
 
 
-FROM ${BASE_RUNTIME_IMAGE} AS runtime-env
-WORKDIR /opt/voicevox_engine
+FROM ${BUILD_IMAGE} AS build-entrypoint
+WORKDIR /work
 
-RUN apt-get update && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
   DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y gosu && \
-  apt-get clean && \
-  rm -rf /var/lib/apt/lists/*
+  apt-get install --no-install-recommends -y \
+  gcc \
+  libc6-dev \
+  make
 
-COPY --from=build-env --link /opt/voicevox_engine/LGPL_LICENSE /opt/voicevox_engine/LICENSE /opt/voicevox_engine/run.py ./
-COPY --from=build-env --link /opt/voicevox_engine/.venv ./.venv
-COPY --from=build-env --link /opt/voicevox_engine/voicevox_engine ./voicevox_engine
-COPY --from=build-env --link /opt/python /opt/python
+COPY --link entrypoint .
 
-COPY --from=gen-licenses-env --link /opt/voicevox_engine/licenses.json ./licenses.json
-COPY --from=checkout-resource --link /engine/README.md ./README.md
-COPY --from=prepare-resource --link /opt/voicevox_engine/resources ./resources
-COPY --from=prepare-resource --link /opt/voicevox_engine/engine_manifest.json ./engine_manifest.json
+RUN SOURCE_DATE_EPOCH=0 make --silent
 
-COPY --from=extract-onnxruntime --link /opt/voicevox_onnxruntime /opt/voicevox_onnxruntime
-COPY --from=extract-core --link /opt/voicevox_core /opt/voicevox_core
-COPY --from=download-vvm --link /vvm /opt/voicevox_vvm
 
-RUN useradd USER
-RUN mkdir -m 1777 /opt/setting
+FROM ${RUNTIME_IMAGE} AS runtime-env
 
-COPY --chmod=755 entrypoint.sh /
+ADD --link rootfs.tar /
+COPY --from=build-entrypoint --link /work/entrypoint /opt/entrypoint
 
+COPY --from=checkout-resource --link /engine/README.md /opt/README.md
+COPY --from=package --link / /opt/voicevox_engine
+
+ENV XDG_DATA_HOME=/opt/setting
+ENV VV_HOST=0.0.0.0
 EXPOSE 50021
-VOLUME ["/opt/setting"]
-ENTRYPOINT ["/entrypoint.sh", "/opt/voicevox_engine/.venv/bin/python3", "/opt/voicevox_engine/run.py"]
-CMD ["--host", "0.0.0.0"]
+USER 65532
+VOLUME ["${XDG_DATA_HOME}"]
+ENTRYPOINT ["/opt/entrypoint", "/opt/README.md", "/opt/voicevox_engine/run"]
 
 
-FROM runtime-env AS runtime-nvidia-env
+FROM runtime-env AS runtime-cuda-env
 
-COPY --from=extract-cudnn --link /opt/cudnn /opt/cudnn
-RUN echo "/opt/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && ldconfig
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute
+ENV VV_USE_GPU=1
 
-CMD ["--use_gpu", "--host", "0.0.0.0"]
+
+FROM runtime-env AS runtime-cpu-env
