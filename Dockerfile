@@ -252,6 +252,10 @@ RUN --mount=target=/tmp/vvms,source=/vvm/vvms,from=download-vvm \
   --mount=type=tmpfs,target=/opt/voicevox_engine/build \
   uv run -m PyInstaller --noconfirm run.spec -- --core_model_dir_path=/tmp/vvms
 
+# Strip debug info
+RUN find ./dist/run/engine_internal '(' -name '*.so' -or -name '*.so.*' ')' -not -path '*/numpy.libs/*' -type f -print0 | \
+  xargs -0 strip --strip-debug
+
 # WORKAROUND
 RUN patchelf --add-rpath '$ORIGIN/engine_internal' ./dist/run/run
 
