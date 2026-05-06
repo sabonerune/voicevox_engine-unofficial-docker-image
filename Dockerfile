@@ -6,8 +6,8 @@ ARG RUNTIME_IMAGE=gcr.io/distroless/base-nossl-debian13
 ARG CORE_VERSION=0.16.2
 ARG RUNTIME_VERSION=1.17.3
 ARG RUNTIME_ACCELERATION=cpu
-ARG RESOURCE_VERSION=0.25.1
-ARG VVM_VERSION=0.16.3
+ARG RESOURCE_VERSION=0.25.2
+ARG VVM_VERSION=0.16.4
 
 ARG CUDART_VERSION=12.2.128
 ARG CUBLAS_VERSION=12.2.4.5
@@ -251,6 +251,10 @@ RUN --mount=type=cache,id=${UV_CACHE_ID},target=/tmp/uv-cache \
 RUN --mount=target=/tmp/vvms,source=/vvm/vvms,from=download-vvm \
   --mount=type=tmpfs,target=/opt/voicevox_engine/build \
   uv run -m PyInstaller --noconfirm run.spec -- --core_model_dir_path=/tmp/vvms
+
+# Strip debug info
+RUN find ./dist/run/engine_internal '(' -name '*.so' -or -name '*.so.*' ')' -not -path '*/numpy.libs/*' -type f -print0 | \
+  xargs -0 strip --strip-debug
 
 # WORKAROUND
 RUN patchelf --add-rpath '$ORIGIN/engine_internal' ./dist/run/run
